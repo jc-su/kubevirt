@@ -50,6 +50,18 @@ bazel-test:
 gen-proto:
 	hack/dockerized "DOCKER_PREFIX=${DOCKER_PREFIX} DOCKER_TAG=${DOCKER_TAG} IMAGE_PULL_POLICY=${IMAGE_PULL_POLICY} VERBOSITY=${VERBOSITY} ./hack/gen-proto.sh"
 
+sync-attestation-proto:
+	./hack/sync-attestation-proto.sh
+
+verify-attestation-proto-sync:
+	./hack/verify-attestation-proto-sync.sh
+
+sync-trustd-proto:
+	./hack/sync-trustd-proto.sh
+
+verify-trustd-proto-sync:
+	./hack/verify-trustd-proto-sync.sh
+
 generate:
 	hack/dockerized hack/build-ginkgo.sh
 	hack/dockerized "DOCKER_PREFIX=${DOCKER_PREFIX} DOCKER_TAG=${DOCKER_TAG} IMAGE_PULL_POLICY=${IMAGE_PULL_POLICY} VERBOSITY=${VERBOSITY} ./hack/generate.sh"
@@ -60,6 +72,8 @@ generate:
 	./hack/update-generated-api-testdata.sh
 
 generate-verify: generate
+	./hack/verify-attestation-proto-sync.sh
+	./hack/verify-trustd-proto-sync.sh
 	./hack/verify-generate.sh
 	./hack/check-for-binaries.sh
 

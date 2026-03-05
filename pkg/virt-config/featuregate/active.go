@@ -229,6 +229,12 @@ const (
 	// Owner: SIG network
 	// Beta: v1.8
 	LiveUpdateNADRef = "LiveUpdateNADRef"
+
+	// ContainerAttestation enables in-guest container trust verification for TDX CVMs.
+	// When enabled, virt-handler connects to trustd inside TDX VMs via vsock
+	// to collect container measurements and verify them against reference values.
+	// Alpha: v1.8.0
+	ContainerAttestation = "ContainerAttestation"
 )
 
 func init() {
@@ -275,4 +281,5 @@ func init() {
 	RegisterFeatureGate(FeatureGate{Name: ReservedOverheadMemlock, State: Alpha})
 	RegisterFeatureGate(FeatureGate{Name: OptOutRoleAggregation, State: Alpha})
 	RegisterFeatureGate(FeatureGate{Name: LiveUpdateNADRef, State: Beta})
+	RegisterFeatureGate(FeatureGate{Name: ContainerAttestation, State: Alpha})
 }

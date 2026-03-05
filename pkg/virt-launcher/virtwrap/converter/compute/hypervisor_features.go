@@ -41,6 +41,10 @@ func (h HypervisorFeaturesDomainConfigurator) Configure(vmi *v1.VirtualMachineIn
 	domain.Spec.Features = &api.Features{}
 
 	if vmi.Spec.Domain.Features == nil {
+		if h.useLaunchSecurityTDX {
+			domain.Spec.Features.PMU = &api.FeatureState{State: "off"}
+			domain.Spec.Features.IOAPIC = &api.FeatureIOAPIC{Driver: "qemu"}
+		}
 		return nil
 	}
 
@@ -97,6 +101,9 @@ func convert_v1_Features_To_api_Features(source *v1.Features, features *api.Feat
 	if useLaunchSecurityTDX {
 		features.PMU = &api.FeatureState{
 			State: "off",
+		}
+		features.IOAPIC = &api.FeatureIOAPIC{
+			Driver: "qemu",
 		}
 	}
 

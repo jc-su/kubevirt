@@ -888,7 +888,36 @@ type SEVSNP struct {
 type SEVAttestation struct {
 }
 
+// TDX configures Intel Trust Domain Extensions for confidential computing.
 type TDX struct {
+	// Policy configures TDX security policy flags.
+	// +optional
+	Policy *TDXPolicy `json:"policy,omitempty"`
+	// Attestation configures container-level attestation inside the TDX VM.
+	// +optional
+	Attestation *TDXAttestation `json:"attestation,omitempty"`
+}
+
+// TDXPolicy contains TDX security policy flags.
+type TDXPolicy struct {
+	// NoDebug disables debugging of the TDX guest.
+	// Defaults to true.
+	// +optional
+	NoDebug *bool `json:"noDebug,omitempty"`
+}
+
+// TDXAttestation configures the in-guest attestation agent for container trust verification.
+type TDXAttestation struct {
+	// Enabled indicates whether trustd should be contacted for container attestation.
+	Enabled bool `json:"enabled"`
+	// HeartbeatIntervalSeconds is the interval at which trustd sends heartbeats.
+	// Defaults to 30.
+	// +optional
+	HeartbeatIntervalSeconds *int32 `json:"heartbeatIntervalSeconds,omitempty"`
+	// AttestationIntervalSeconds is the interval at which virt-handler triggers container attestation.
+	// Defaults to 60.
+	// +optional
+	AttestationIntervalSeconds *int32 `json:"attestationIntervalSeconds,omitempty"`
 }
 
 type LunTarget struct {

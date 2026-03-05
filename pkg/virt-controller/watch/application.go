@@ -246,6 +246,7 @@ type VirtControllerApp struct {
 	host                       string
 	evacuationController       *evacuation.EvacuationController
 	disruptionBudgetController *disruptionbudget.DisruptionBudgetController
+	trustController            *TrustController
 
 	ctx context.Context
 
@@ -746,6 +747,28 @@ func (vca *VirtControllerApp) initCommon() {
 			vca.clientSet,
 		)
 	}
+
+	trustRecorder := vca.newRecorder(k8sv1.NamespaceAll, TrustControllerName)
+	vca.trustController = NewTrustController(vca.vmiInformer, trustRecorder, vca.clusterConfig)
+
+	// Register trust controller to process VMIs on update
+	vca.vmiInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		UpdateFunc: func(_, obj interface{}) {
+			if vmiObj, ok := obj.(*v1.VirtualMachineInstance); ok {
+				vca.trustController.ProcessVMI(vmiObj)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			switch deleted := obj.(type) {
+			case *v1.VirtualMachineInstance:
+				vca.trustController.clearStateForVMI(string(deleted.UID))
+			case cache.DeletedFinalStateUnknown:
+				if vmiObj, ok := deleted.Obj.(*v1.VirtualMachineInstance); ok {
+					vca.trustController.clearStateForVMI(string(vmiObj.UID))
+				}
+			}
+		},
+	})
 
 	recorder := vca.newRecorder(k8sv1.NamespaceAll, "node-controller")
 	vca.nodeController, err = node.NewController(vca.clientSet, vca.nodeInformer, vca.vmiInformer, recorder)

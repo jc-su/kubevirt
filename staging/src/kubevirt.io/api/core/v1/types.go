@@ -336,6 +336,11 @@ type VirtualMachineInstanceStatus struct {
 	// +nullable
 	// +optional
 	ChangedBlockTracking *ChangedBlockTrackingStatus `json:"changedBlockTracking,omitempty" optional:"true"`
+
+	// ContainerTrustStates contains the trust verification state for each container inside a TDX CVM.
+	// +listType=atomic
+	// +optional
+	ContainerTrustStates []ContainerTrustState `json:"containerTrustStates,omitempty"`
 }
 
 // DeviceStatus has the information of all devices allocated spec.domain.devices
@@ -742,6 +747,12 @@ const (
 
 	// VirtualMachineInstanceEvictionRequested indicates that an eviction has been requested for the VMI
 	VirtualMachineInstanceEvictionRequested VirtualMachineInstanceConditionType = "EvictionRequested"
+
+	// VirtualMachineInstanceCVMAgentConnected reflects whether trustd inside a TDX VM is reachable via vsock.
+	VirtualMachineInstanceCVMAgentConnected VirtualMachineInstanceConditionType = "CVMAgentConnected"
+
+	// VirtualMachineInstanceContainersTrusted reflects whether all containers inside a TDX CVM are verified as trusted.
+	VirtualMachineInstanceContainersTrusted VirtualMachineInstanceConditionType = "ContainersTrusted"
 )
 
 // These are valid reasons for VMI conditions.
@@ -2263,6 +2274,56 @@ type VolumeSnapshotStatus struct {
 	Enabled bool `json:"enabled"`
 	// Empty if snapshotting is enabled, contains reason otherwise
 	Reason string `json:"reason,omitempty" optional:"true"`
+}
+
+// ContainerTrustVerdict represents the trust assessment of a container inside a CVM.
+// +kubebuilder:validation:Enum=Trusted;Untrusted;Unknown;Stale
+type ContainerTrustVerdict string
+
+const (
+	// ContainerTrustVerdictTrusted means the container's measurements match reference values.
+	ContainerTrustVerdictTrusted ContainerTrustVerdict = "Trusted"
+	// ContainerTrustVerdictUntrusted means the container's measurements do not match reference values.
+	ContainerTrustVerdictUntrusted ContainerTrustVerdict = "Untrusted"
+	// ContainerTrustVerdictUnknown means the container has not been attested yet.
+	ContainerTrustVerdictUnknown ContainerTrustVerdict = "Unknown"
+	// ContainerTrustVerdictStale means the last attestation or heartbeat is outdated.
+	ContainerTrustVerdictStale ContainerTrustVerdict = "Stale"
+)
+
+// ContainerTrustState reports the trust verification state of a single container inside a TDX CVM.
+type ContainerTrustState struct {
+	// ContainerID is the cgroup-derived identifier of the container inside the CVM.
+	ContainerID string `json:"containerID"`
+	// RTMR3 is the current per-container virtual RTMR3 value (hex-encoded SHA-384).
+	// +optional
+	RTMR3 string `json:"rtmr3,omitempty"`
+	// MeasurementCount is the number of IMA measurements recorded for this container.
+	// +optional
+	MeasurementCount int64 `json:"measurementCount,omitempty"`
+	// LastHeartbeat is the timestamp of the last heartbeat received from trustd for this container.
+	// +optional
+	LastHeartbeat *metav1.Time `json:"lastHeartbeat,omitempty"`
+	// LastAttestation is the timestamp of the last successful attestation.
+	// +optional
+	LastAttestation *metav1.Time `json:"lastAttestation,omitempty"`
+	// Verdict is the trust assessment from the attestation service.
+	// +optional
+	Verdict ContainerTrustVerdict `json:"verdict,omitempty"`
+	// VerdictMessage provides human-readable details about the verdict.
+	// +optional
+	VerdictMessage string `json:"verdictMessage,omitempty"`
+	// AttestationToken is the JWT token from the attestation service encoding the verification result.
+	// +optional
+	AttestationToken string `json:"attestationToken,omitempty"`
+}
+
+// ContainerMeasurement represents a single IMA file measurement inside a container.
+type ContainerMeasurement struct {
+	// Digest is the hex-encoded SHA-384 hash of the file.
+	Digest string `json:"digest"`
+	// File is the path of the measured file.
+	File string `json:"file"`
 }
 
 type VirtualMachineVolumeRequest struct {
@@ -3872,6 +3933,46 @@ type SEVSecretOptions struct {
 	Header string `json:"header,omitempty"`
 	// Base64 encoded encrypted launch secret.
 	Secret string `json:"secret,omitempty"`
+}
+
+// TDXContainerAttestationInfo contains the result of attesting a container inside a TDX CVM.
+//
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+type TDXContainerAttestationInfo struct {
+	metav1.TypeMeta `json:",inline"`
+	// ContainerID is the cgroup-derived identifier.
+	ContainerID string `json:"containerID"`
+	// RTMR3 is the current per-container virtual RTMR3 value (hex-encoded SHA-384).
+	RTMR3 string `json:"rtmr3,omitempty"`
+	// InitialRTMR3 is the RTMR3 value at container creation.
+	InitialRTMR3 string `json:"initialRtmr3,omitempty"`
+	// Measurements is the ordered list of IMA file measurements.
+	Measurements []ContainerMeasurement `json:"measurements,omitempty"`
+	// TDQuote is the base64-encoded TDX Quote binding the RTMR3 to hardware attestation.
+	TDQuote string `json:"tdQuote,omitempty"`
+	// Nonce is the hex-encoded nonce used in this attestation.
+	Nonce string `json:"nonce,omitempty"`
+	// Verdict is the trust assessment from the attestation service.
+	Verdict ContainerTrustVerdict `json:"verdict,omitempty"`
+	// VerdictMessage provides human-readable details about the verdict.
+	VerdictMessage string `json:"verdictMessage,omitempty"`
+	// AttestationToken is the JWT from the attestation service.
+	AttestationToken string `json:"attestationToken,omitempty"`
+}
+
+// TDXAttestContainerOptions specifies which container to attest inside a TDX CVM.
+type TDXAttestContainerOptions struct {
+	// ContainerID is the cgroup-derived identifier of the container to attest.
+	ContainerID string `json:"containerID"`
+}
+
+// TDXContainerListInfo lists all containers and their trust states inside a TDX CVM.
+//
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+type TDXContainerListInfo struct {
+	metav1.TypeMeta `json:",inline"`
+	// Containers lists the trust state of each container.
+	Containers []ContainerTrustState `json:"containers,omitempty"`
 }
 
 // ObjectGraphNode represents an individual node in the graph.

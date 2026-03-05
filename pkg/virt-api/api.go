@@ -609,6 +609,37 @@ func (app *virtAPIApp) composeSubresources() {
 			Returns(http.StatusOK, "OK", "").
 			Returns(http.StatusBadRequest, httpStatusBadRequestMessage, ""))
 
+		// Intel TDX container attestation endpoints
+		subws.Route(subws.GET(definitions.NamespacedResourcePath(subresourcesvmiGVR)+definitions.SubResourcePath("tdx/containers")).
+			To(subresourceApp.TDXContainerListHandler).
+			Param(definitions.NamespaceParam(subws)).Param(definitions.NameParam(subws)).
+			Consumes(restful.MIME_JSON).
+			Produces(restful.MIME_JSON).
+			Operation(version.Version+"TDXContainerList").
+			Doc("List containers and their trust states inside a TDX CVM").
+			Writes(v1.TDXContainerListInfo{}).
+			Returns(http.StatusOK, "OK", v1.TDXContainerListInfo{}))
+
+		subws.Route(subws.PUT(definitions.NamespacedResourcePath(subresourcesvmiGVR)+definitions.SubResourcePath("tdx/container/attest")).
+			To(subresourceApp.TDXContainerAttestHandler).
+			Consumes(mime.MIME_ANY).
+			Reads(v1.TDXAttestContainerOptions{}).
+			Param(definitions.NamespaceParam(subws)).Param(definitions.NameParam(subws)).
+			Operation(version.Version+"TDXContainerAttest").
+			Doc("Trigger attestation of a specific container inside a TDX CVM").
+			Returns(http.StatusOK, "OK", v1.TDXContainerAttestationInfo{}).
+			Returns(http.StatusBadRequest, httpStatusBadRequestMessage, ""))
+
+		subws.Route(subws.GET(definitions.NamespacedResourcePath(subresourcesvmiGVR)+definitions.SubResourcePath("tdx/truststates")).
+			To(subresourceApp.TDXTrustStatesHandler).
+			Param(definitions.NamespaceParam(subws)).Param(definitions.NameParam(subws)).
+			Consumes(restful.MIME_JSON).
+			Produces(restful.MIME_JSON).
+			Operation(version.Version+"TDXTrustStates").
+			Doc("Get container trust states from VMI status").
+			Writes(v1.TDXContainerListInfo{}).
+			Returns(http.StatusOK, "OK", v1.TDXContainerListInfo{}))
+
 		subws.Route(subws.PUT(definitions.NamespacedResourcePath(subresourcesvmGVR)+definitions.SubResourcePath("evacuate/cancel")).
 			To(subresourceApp.EvacuateCancelHandler(subresourceApp.FetchVirtualMachineInstanceForVM)).
 			Consumes(mime.MIME_ANY).
@@ -787,6 +818,18 @@ func (app *virtAPIApp) composeSubresources() {
 					},
 					{
 						Name:       "virtualmachineinstances/sev/injectlaunchsecret",
+						Namespaced: true,
+					},
+					{
+						Name:       "virtualmachineinstances/tdx/containers",
+						Namespaced: true,
+					},
+					{
+						Name:       "virtualmachineinstances/tdx/container/attest",
+						Namespaced: true,
+					},
+					{
+						Name:       "virtualmachineinstances/tdx/truststates",
 						Namespaced: true,
 					},
 					{

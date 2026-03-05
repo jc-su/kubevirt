@@ -87,6 +87,7 @@ func amd64LaunchSecurity(vmi *v1.VirtualMachineInstance) *api.LaunchSecurity {
 		return &api.LaunchSecurity{
 			Type:                   "tdx",
 			QuoteGenerationService: &api.QGS{Path: qgsSocketPath},
+			Policy:                 launchsecurity.TDXPolicyFromSpec(launchSec.TDX.Policy),
 		}
 	}
 

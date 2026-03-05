@@ -112,6 +112,7 @@ type VirtualMachineController struct {
 	vmiGlobalStore           cache.Store
 	multipathSocketMonitor   *multipathmonitor.MultipathSocketMonitor
 	cbtHandler               *CBTHandler
+	trustManager             *cvmTrustManager
 }
 
 var getCgroupManager = func(vmi *v1.VirtualMachineInstance, host string, hypervisorNodeInfo hypervisor.HypervisorNodeInformation) (cgroup.Manager, error) {
@@ -196,6 +197,7 @@ func NewVirtualMachineController(
 		vmiGlobalStore:           vmiGlobalStore,
 		multipathSocketMonitor:   multipathmonitor.NewMultipathSocketMonitor(),
 		cbtHandler:               cbtHandler,
+		trustManager:             newCVMTrustManager(),
 	}
 
 	_, err = vmiInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -1082,6 +1084,9 @@ func (c *VirtualMachineController) updateVMIStatus(oldStatus *v1.VirtualMachineI
 	if err := c.updateChecksumInfo(vmi, syncError); err != nil {
 		return err
 	}
+
+	// Update CVM trust states if TDX attestation is enabled
+	updateCVMTrustConditions(vmi, c.trustManager, condManager)
 
 	// Handle sync error
 	c.handleSyncError(vmi, condManager, syncError)

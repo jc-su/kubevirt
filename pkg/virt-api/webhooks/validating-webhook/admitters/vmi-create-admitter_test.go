@@ -2857,6 +2857,87 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
 			Expect(causes).To(BeEmpty())
 		})
+
+		It("should accept TDX with direct kernel boot instead of explicit EFI", func() {
+			vmi.Spec.Domain.Firmware = &v1.Firmware{
+				KernelBoot: &v1.KernelBoot{
+					KernelArgs: "root=LABEL=cloudimg-rootfs rw console=ttyS0",
+					Container: &v1.KernelBootContainer{
+						Image:      "registry.example.com/tdx-kernel:latest",
+						KernelPath: "/boot/vmlinuz",
+						InitrdPath: "/boot/initrd.img",
+					},
+				},
+			}
+			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
+			Expect(causes).To(BeEmpty())
+		})
+
+		It("should reject TDX with no firmware at all", func() {
+			vmi.Spec.Domain.Firmware = nil
+			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
+			Expect(causes).To(HaveLen(1))
+			Expect(causes[0].Message).To(ContainSubstring("TDX requires OVMF"))
+		})
+
+		Context("with TDX container attestation", func() {
+			BeforeEach(func() {
+				enableFeatureGates(featuregate.WorkloadEncryptionTDX, featuregate.VSOCKGate, featuregate.ContainerAttestation)
+				vmi.Spec.Domain.LaunchSecurity.TDX.Attestation = &v1.TDXAttestation{
+					Enabled: true,
+				}
+				vmi.Spec.Domain.Devices.AutoattachVSOCK = pointer.P(true)
+			})
+
+			It("should accept when VSOCK and ContainerAttestation gate are enabled", func() {
+				causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
+				Expect(causes).To(BeEmpty())
+			})
+
+			It("should reject when VSOCK is not enabled", func() {
+				vmi.Spec.Domain.Devices.AutoattachVSOCK = nil
+				causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
+				Expect(causes).To(HaveLen(1))
+				Expect(causes[0].Message).To(ContainSubstring("TDX container attestation requires VSOCK"))
+			})
+
+			It("should reject when VSOCK is explicitly false", func() {
+				vmi.Spec.Domain.Devices.AutoattachVSOCK = pointer.P(false)
+				causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
+				Expect(causes).To(HaveLen(1))
+				Expect(causes[0].Message).To(ContainSubstring("TDX container attestation requires VSOCK"))
+			})
+
+			It("should reject when ContainerAttestation feature gate is disabled", func() {
+				enableFeatureGates(featuregate.WorkloadEncryptionTDX, featuregate.VSOCKGate)
+				causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
+				Expect(causes).To(HaveLen(1))
+				Expect(causes[0].Message).To(ContainSubstring("ContainerAttestation feature gate"))
+			})
+		})
+
+		It("should reject when machine type is not q35", func() {
+			vmi.Spec.Domain.Machine = &v1.Machine{Type: "pc-i440fx-5.2"}
+			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
+			Expect(causes).ToNot(BeEmpty())
+			messages := make([]string, len(causes))
+			for i, c := range causes {
+				messages[i] = c.Message
+			}
+			Expect(messages).To(ContainElement(ContainSubstring("TDX requires q35 machine type")))
+		})
+
+		It("should accept when machine type is q35", func() {
+			vmi.Spec.Domain.Machine = &v1.Machine{Type: "pc-q35-8.2"}
+			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
+			Expect(causes).To(BeEmpty())
+		})
+
+		It("should accept when machine type is not specified", func() {
+			vmi.Spec.Domain.Machine = nil
+			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
+			Expect(causes).To(BeEmpty())
+		})
 	})
 
 	Context("with vsocks defined", func() {

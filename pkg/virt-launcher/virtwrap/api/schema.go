@@ -334,6 +334,11 @@ type Features struct {
 	PVSpinlock *FeaturePVSpinlock `xml:"pvspinlock,omitempty"`
 	PMU        *FeatureState      `xml:"pmu,omitempty"`
 	VMPort     *FeatureState      `xml:"vmport,omitempty"`
+	IOAPIC     *FeatureIOAPIC     `xml:"ioapic,omitempty"`
+}
+
+type FeatureIOAPIC struct {
+	Driver string `xml:"driver,attr,omitempty"`
 }
 
 const HypervModePassthrough = "passthrough"

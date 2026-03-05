@@ -22,12 +22,14 @@ package webhooks
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfield "k8s.io/apimachinery/pkg/util/validation/field"
 
 	v1 "kubevirt.io/api/core/v1"
 
+	"kubevirt.io/kubevirt/pkg/util"
 	virtconfig "kubevirt.io/kubevirt/pkg/virt-config"
 	"kubevirt.io/kubevirt/pkg/virt-config/featuregate"
 )
@@ -120,14 +122,32 @@ func ValidateLaunchSecurityAmd64(field *k8sfield.Path, spec *v1.VirtualMachineIn
 			})
 		}
 
+		// Firmware validation: TDX allows either explicit EFI bootloader or direct kernel boot
+		// (OVMF firmware is auto-selected for TDX). SEV/SNP always require explicit EFI.
 		firmware := spec.Domain.Firmware
-		if firmware == nil || firmware.Bootloader == nil || firmware.Bootloader.EFI == nil {
+		hasEFI := firmware != nil && firmware.Bootloader != nil && firmware.Bootloader.EFI != nil
+		hasKernelBoot := firmware != nil && firmware.KernelBoot != nil &&
+			(firmware.KernelBoot.Container != nil || firmware.KernelBoot.KernelArgs != "")
+
+		if launchSecurity.TDX != nil {
+			// TDX: accept EFI or kernel boot (OVMF auto-selected for TDX)
+			if !hasEFI && !hasKernelBoot {
+				causes = append(causes, metav1.StatusCause{
+					Type:    metav1.CauseTypeFieldValueInvalid,
+					Message: "TDX requires OVMF (UEFI) or direct kernel boot",
+					Field:   field.Child("launchSecurity").String(),
+				})
+			}
+		} else if !hasEFI {
+			// SEV/SNP: require explicit EFI
 			causes = append(causes, metav1.StatusCause{
 				Type:    metav1.CauseTypeFieldValueInvalid,
 				Message: fmt.Sprintf("%s requires OVMF (UEFI)", selectedTypes[0]),
 				Field:   field.Child("launchSecurity").String(),
 			})
-		} else {
+		}
+
+		if hasEFI {
 			efi := firmware.Bootloader.EFI
 			if (launchSecurity.SEV != nil || launchSecurity.SNP != nil) &&
 				(efi.SecureBoot == nil || *efi.SecureBoot) {
@@ -146,6 +166,11 @@ func ValidateLaunchSecurityAmd64(field *k8sfield.Path, spec *v1.VirtualMachineIn
 					Field:   field.Child("launchSecurity").String(),
 				})
 			}
+		}
+
+		// TDX-specific validations
+		if launchSecurity.TDX != nil {
+			causes = append(causes, validateTDXSpec(field, spec, config)...)
 		}
 
 		startStrategy := spec.StartStrategy
@@ -168,6 +193,47 @@ func ValidateLaunchSecurityAmd64(field *k8sfield.Path, spec *v1.VirtualMachineIn
 					Field:   field.Child("launchSecurity").String(),
 				})
 			}
+		}
+	}
+
+	return causes
+}
+
+// validateTDXSpec checks TDX-specific constraints: attestation requires VSOCK and ContainerAttestation
+// feature gate, and machine type must be q35-compatible.
+func validateTDXSpec(field *k8sfield.Path, spec *v1.VirtualMachineInstanceSpec, config *virtconfig.ClusterConfig) []metav1.StatusCause {
+	var causes []metav1.StatusCause
+	tdx := spec.Domain.LaunchSecurity.TDX
+
+	// Container attestation requires VSOCK (virt-handler talks to trustd via vsock)
+	if util.IsTDXAttestationEnabled(tdx) {
+		if !config.ContainerAttestationEnabled() {
+			causes = append(causes, metav1.StatusCause{
+				Type:    metav1.CauseTypeFieldValueInvalid,
+				Message: "TDX container attestation requires the ContainerAttestation feature gate",
+				Field:   field.Child("launchSecurity", "tdx", "attestation").String(),
+			})
+		}
+
+		vsock := spec.Domain.Devices.AutoattachVSOCK
+		if vsock == nil || !*vsock {
+			causes = append(causes, metav1.StatusCause{
+				Type:    metav1.CauseTypeFieldValueRequired,
+				Message: "TDX container attestation requires VSOCK (set devices.autoattachVSOCK: true)",
+				Field:   field.Child("domain", "devices", "autoattachVSOCK").String(),
+			})
+		}
+	}
+
+	// TDX requires q35 machine type (or unset, since q35 is the default for amd64)
+	if spec.Domain.Machine != nil && spec.Domain.Machine.Type != "" {
+		mt := strings.ToLower(spec.Domain.Machine.Type)
+		if !strings.Contains(mt, "q35") {
+			causes = append(causes, metav1.StatusCause{
+				Type:    metav1.CauseTypeFieldValueInvalid,
+				Message: fmt.Sprintf("TDX requires q35 machine type, got: %s", spec.Domain.Machine.Type),
+				Field:   field.Child("domain", "machine", "type").String(),
+			})
 		}
 	}
 

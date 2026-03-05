@@ -62,3 +62,16 @@ func IsSEVAttestationRequested(vmi *v1.VirtualMachineInstance) bool {
 func IsTDXVMI(vmi *v1.VirtualMachineInstance) bool {
 	return vmi.Spec.Domain.LaunchSecurity != nil && vmi.Spec.Domain.LaunchSecurity.TDX != nil
 }
+
+// Check if a VMI spec requests TDX with container attestation enabled
+func IsTDXAttestationRequested(vmi *v1.VirtualMachineInstance) bool {
+	if !IsTDXVMI(vmi) {
+		return false
+	}
+	return IsTDXAttestationEnabled(vmi.Spec.Domain.LaunchSecurity.TDX)
+}
+
+// IsTDXAttestationEnabled checks whether a TDX spec has container attestation enabled.
+func IsTDXAttestationEnabled(tdx *v1.TDX) bool {
+	return tdx != nil && tdx.Attestation != nil && tdx.Attestation.Enabled
+}

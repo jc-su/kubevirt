@@ -96,6 +96,9 @@ const (
 	apiVMInstancesSEVQueryLaunchMeasurement = "virtualmachineinstances/sev/querylaunchmeasurement"
 	apiVMInstancesSEVSetupSession           = "virtualmachineinstances/sev/setupsession"
 	apiVMInstancesSEVInjectLaunchSecret     = "virtualmachineinstances/sev/injectlaunchsecret"
+	apiVMInstancesTDXContainers             = "virtualmachineinstances/tdx/containers"
+	apiVMInstancesTDXContainerAttest        = "virtualmachineinstances/tdx/container/attest"
+	apiVMInstancesTDXTrustStates            = "virtualmachineinstances/tdx/truststates"
 	apiVMInstancesUSBRedir                  = "virtualmachineinstances/usbredir"
 	apiVMInstancesObjectGraph               = "virtualmachineinstances/objectgraph"
 	apiVMInstancesEvacuateCancel            = "virtualmachineinstances/evacuate/cancel"
@@ -216,6 +219,8 @@ func newAdminClusterRole() *rbacv1.ClusterRole {
 					apiVMInstancesUserList,
 					apiVMInstancesSEVFetchCertChain,
 					apiVMInstancesSEVQueryLaunchMeasurement,
+					apiVMInstancesTDXContainers,
+					apiVMInstancesTDXTrustStates,
 					apiVMInstancesUSBRedir,
 					apiVMObjectGraph,
 					apiVMInstancesObjectGraph,
@@ -239,6 +244,7 @@ func newAdminClusterRole() *rbacv1.ClusterRole {
 					apiVMInstancesReset,
 					apiVMInstancesSEVSetupSession,
 					apiVMInstancesSEVInjectLaunchSecret,
+					apiVMInstancesTDXContainerAttest,
 					apiVMInstancesEvacuateCancel,
 				},
 				Verbs: []string{
@@ -425,6 +431,8 @@ func newEditClusterRole() *rbacv1.ClusterRole {
 					apiVMInstancesUserList,
 					apiVMInstancesSEVFetchCertChain,
 					apiVMInstancesSEVQueryLaunchMeasurement,
+					apiVMInstancesTDXContainers,
+					apiVMInstancesTDXTrustStates,
 					apiVMInstancesUSBRedir,
 					apiVMObjectGraph,
 					apiVMInstancesObjectGraph,
@@ -448,6 +456,7 @@ func newEditClusterRole() *rbacv1.ClusterRole {
 					apiVMInstancesReset,
 					apiVMInstancesSEVSetupSession,
 					apiVMInstancesSEVInjectLaunchSecret,
+					apiVMInstancesTDXContainerAttest,
 					apiVMInstancesEvacuateCancel,
 				},
 				Verbs: []string{
@@ -692,6 +701,8 @@ func newViewClusterRole() *rbacv1.ClusterRole {
 					apiVMInstancesUserList,
 					apiVMInstancesSEVFetchCertChain,
 					apiVMInstancesSEVQueryLaunchMeasurement,
+					apiVMInstancesTDXContainers,
+					apiVMInstancesTDXTrustStates,
 					apiVMObjectGraph,
 					apiVMInstancesObjectGraph,
 				},

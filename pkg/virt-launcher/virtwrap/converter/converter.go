@@ -1023,6 +1023,15 @@ func Convert_v1_VirtualMachineInstance_To_api_Domain(vmi *v1.VirtualMachineInsta
 		isMemfdRequired = true
 	}
 
+	// TDX VMs require anonymous memory with private access mode
+	if c.UseLaunchSecurityTDX {
+		if domain.Spec.MemoryBacking == nil {
+			domain.Spec.MemoryBacking = &api.MemoryBacking{}
+		}
+		domain.Spec.MemoryBacking.Source = &api.MemoryBackingSource{Type: "anonymous"}
+		domain.Spec.MemoryBacking.Access = &api.MemoryBackingAccess{Mode: "private"}
+	}
+
 	if isMemfdRequired {
 		// Set memfd as memory backend to solve SELinux restrictions
 		// See the issue: https://github.com/kubevirt/kubevirt/issues/3781

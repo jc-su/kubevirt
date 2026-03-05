@@ -40,6 +40,10 @@ const (
 	sevFetchCertChainTemplateURI         = "https://%s:%v/v1/namespaces/%s/virtualmachineinstances/%s/sev/fetchcertchain"
 	sevQueryLaunchMeasurementTemplateURI = "https://%s:%v/v1/namespaces/%s/virtualmachineinstances/%s/sev/querylaunchmeasurement"
 	sevInjectLaunchSecretTemplateURI     = "https://%s:%v/v1/namespaces/%s/virtualmachineinstances/%s/sev/injectlaunchsecret"
+
+	tdxContainerListTemplateURI   = "https://%s:%v/v1/namespaces/%s/virtualmachineinstances/%s/tdx/containers"
+	tdxContainerAttestTemplateURI = "https://%s:%v/v1/namespaces/%s/virtualmachineinstances/%s/tdx/container/attest"
+	tdxTrustStatesTemplateURI     = "https://%s:%v/v1/namespaces/%s/virtualmachineinstances/%s/tdx/truststates"
 )
 
 func NewVirtHandlerClient(virtCli KubevirtClient, httpCli *http.Client) VirtHandlerClient {
@@ -73,6 +77,9 @@ type VirtHandlerConn interface {
 	SEVFetchCertChainURI(vmi *virtv1.VirtualMachineInstance) (string, error)
 	SEVQueryLaunchMeasurementURI(vmi *virtv1.VirtualMachineInstance) (string, error)
 	SEVInjectLaunchSecretURI(vmi *virtv1.VirtualMachineInstance) (string, error)
+	TDXContainerListURI(vmi *virtv1.VirtualMachineInstance) (string, error)
+	TDXContainerAttestURI(vmi *virtv1.VirtualMachineInstance) (string, error)
+	TDXTrustStatesURI(vmi *virtv1.VirtualMachineInstance) (string, error)
 	Pod() (pod *v1.Pod, err error)
 	Put(url string, body io.ReadCloser) error
 	Get(url, contentType string) (string, error)
@@ -341,4 +348,16 @@ func (v *virtHandlerConn) SEVQueryLaunchMeasurementURI(vmi *virtv1.VirtualMachin
 
 func (v *virtHandlerConn) SEVInjectLaunchSecretURI(vmi *virtv1.VirtualMachineInstance) (string, error) {
 	return v.formatURI(sevInjectLaunchSecretTemplateURI, vmi)
+}
+
+func (v *virtHandlerConn) TDXContainerListURI(vmi *virtv1.VirtualMachineInstance) (string, error) {
+	return v.formatURI(tdxContainerListTemplateURI, vmi)
+}
+
+func (v *virtHandlerConn) TDXContainerAttestURI(vmi *virtv1.VirtualMachineInstance) (string, error) {
+	return v.formatURI(tdxContainerAttestTemplateURI, vmi)
+}
+
+func (v *virtHandlerConn) TDXTrustStatesURI(vmi *virtv1.VirtualMachineInstance) (string, error) {
+	return v.formatURI(tdxTrustStatesTemplateURI, vmi)
 }
