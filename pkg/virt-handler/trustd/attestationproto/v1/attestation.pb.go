@@ -836,6 +836,129 @@ func (x *HealthResponse) GetUptimeSeconds() int64 {
 	return 0
 }
 
+// UpdateLatestVerdictRequest force-updates latest verdicts for subjects.
+type UpdateLatestVerdictRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Subject identities, e.g. "cgroup://<path>".
+	Subjects      []string `protobuf:"bytes,1,rep,name=subjects,proto3" json:"subjects,omitempty"`
+	Verdict       Verdict  `protobuf:"varint,2,opt,name=verdict,proto3,enum=attestation.v1.Verdict" json:"verdict,omitempty"`
+	Message       string   `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	PolicyAction  string   `protobuf:"bytes,4,opt,name=policy_action,json=policyAction,proto3" json:"policy_action,omitempty"`
+	Source        string   `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateLatestVerdictRequest) Reset() {
+	*x = UpdateLatestVerdictRequest{}
+	mi := &file_v1_attestation_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateLatestVerdictRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateLatestVerdictRequest) ProtoMessage() {}
+
+func (x *UpdateLatestVerdictRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_attestation_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateLatestVerdictRequest.ProtoReflect.Descriptor instead.
+func (*UpdateLatestVerdictRequest) Descriptor() ([]byte, []int) {
+	return file_v1_attestation_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateLatestVerdictRequest) GetSubjects() []string {
+	if x != nil {
+		return x.Subjects
+	}
+	return nil
+}
+
+func (x *UpdateLatestVerdictRequest) GetVerdict() Verdict {
+	if x != nil {
+		return x.Verdict
+	}
+	return Verdict_VERDICT_UNSPECIFIED
+}
+
+func (x *UpdateLatestVerdictRequest) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *UpdateLatestVerdictRequest) GetPolicyAction() string {
+	if x != nil {
+		return x.PolicyAction
+	}
+	return ""
+}
+
+func (x *UpdateLatestVerdictRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+// UpdateLatestVerdictResponse confirms how many subjects were updated.
+type UpdateLatestVerdictResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Updated       uint32                 `protobuf:"varint,1,opt,name=updated,proto3" json:"updated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateLatestVerdictResponse) Reset() {
+	*x = UpdateLatestVerdictResponse{}
+	mi := &file_v1_attestation_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateLatestVerdictResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateLatestVerdictResponse) ProtoMessage() {}
+
+func (x *UpdateLatestVerdictResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_attestation_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateLatestVerdictResponse.ProtoReflect.Descriptor instead.
+func (*UpdateLatestVerdictResponse) Descriptor() ([]byte, []int) {
+	return file_v1_attestation_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *UpdateLatestVerdictResponse) GetUpdated() uint32 {
+	if x != nil {
+		return x.Updated
+	}
+	return 0
+}
+
 // GetLatestVerdictRequest queries latest verdict for a subject.
 type GetLatestVerdictRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -847,7 +970,7 @@ type GetLatestVerdictRequest struct {
 
 func (x *GetLatestVerdictRequest) Reset() {
 	*x = GetLatestVerdictRequest{}
-	mi := &file_v1_attestation_proto_msgTypes[11]
+	mi := &file_v1_attestation_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -859,7 +982,7 @@ func (x *GetLatestVerdictRequest) String() string {
 func (*GetLatestVerdictRequest) ProtoMessage() {}
 
 func (x *GetLatestVerdictRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[11]
+	mi := &file_v1_attestation_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -872,7 +995,7 @@ func (x *GetLatestVerdictRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLatestVerdictRequest.ProtoReflect.Descriptor instead.
 func (*GetLatestVerdictRequest) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{11}
+	return file_v1_attestation_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetLatestVerdictRequest) GetSubject() string {
@@ -900,7 +1023,7 @@ type GetLatestVerdictResponse struct {
 
 func (x *GetLatestVerdictResponse) Reset() {
 	*x = GetLatestVerdictResponse{}
-	mi := &file_v1_attestation_proto_msgTypes[12]
+	mi := &file_v1_attestation_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -912,7 +1035,7 @@ func (x *GetLatestVerdictResponse) String() string {
 func (*GetLatestVerdictResponse) ProtoMessage() {}
 
 func (x *GetLatestVerdictResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[12]
+	mi := &file_v1_attestation_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -925,7 +1048,7 @@ func (x *GetLatestVerdictResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLatestVerdictResponse.ProtoReflect.Descriptor instead.
 func (*GetLatestVerdictResponse) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{12}
+	return file_v1_attestation_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetLatestVerdictResponse) GetSubject() string {
@@ -1005,7 +1128,7 @@ type WatchVerdictUpdatesRequest struct {
 
 func (x *WatchVerdictUpdatesRequest) Reset() {
 	*x = WatchVerdictUpdatesRequest{}
-	mi := &file_v1_attestation_proto_msgTypes[13]
+	mi := &file_v1_attestation_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1017,7 +1140,7 @@ func (x *WatchVerdictUpdatesRequest) String() string {
 func (*WatchVerdictUpdatesRequest) ProtoMessage() {}
 
 func (x *WatchVerdictUpdatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[13]
+	mi := &file_v1_attestation_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1030,7 +1153,7 @@ func (x *WatchVerdictUpdatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchVerdictUpdatesRequest.ProtoReflect.Descriptor instead.
 func (*WatchVerdictUpdatesRequest) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{13}
+	return file_v1_attestation_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *WatchVerdictUpdatesRequest) GetSubjects() []string {
@@ -1065,7 +1188,7 @@ type VerdictUpdate struct {
 
 func (x *VerdictUpdate) Reset() {
 	*x = VerdictUpdate{}
-	mi := &file_v1_attestation_proto_msgTypes[14]
+	mi := &file_v1_attestation_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1077,7 +1200,7 @@ func (x *VerdictUpdate) String() string {
 func (*VerdictUpdate) ProtoMessage() {}
 
 func (x *VerdictUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[14]
+	mi := &file_v1_attestation_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1090,7 +1213,7 @@ func (x *VerdictUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerdictUpdate.ProtoReflect.Descriptor instead.
 func (*VerdictUpdate) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{14}
+	return file_v1_attestation_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *VerdictUpdate) GetSubject() string {
@@ -1214,7 +1337,15 @@ const file_v1_attestation_proto_rawDesc = "" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12%\n" +
-	"\x0euptime_seconds\x18\x03 \x01(\x03R\ruptimeSeconds\"3\n" +
+	"\x0euptime_seconds\x18\x03 \x01(\x03R\ruptimeSeconds\"\xc2\x01\n" +
+	"\x1aUpdateLatestVerdictRequest\x12\x1a\n" +
+	"\bsubjects\x18\x01 \x03(\tR\bsubjects\x121\n" +
+	"\averdict\x18\x02 \x01(\x0e2\x17.attestation.v1.VerdictR\averdict\x12\x18\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\x12#\n" +
+	"\rpolicy_action\x18\x04 \x01(\tR\fpolicyAction\x12\x16\n" +
+	"\x06source\x18\x05 \x01(\tR\x06source\"7\n" +
+	"\x1bUpdateLatestVerdictResponse\x12\x18\n" +
+	"\aupdated\x18\x01 \x01(\rR\aupdated\"3\n" +
 	"\x17GetLatestVerdictRequest\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\"\xc5\x02\n" +
 	"\x18GetLatestVerdictResponse\x12\x18\n" +
@@ -1249,12 +1380,13 @@ const file_v1_attestation_proto_rawDesc = "" +
 	"\x0fVERDICT_TRUSTED\x10\x01\x12\x15\n" +
 	"\x11VERDICT_UNTRUSTED\x10\x02\x12\x11\n" +
 	"\rVERDICT_STALE\x10\x03\x12\x13\n" +
-	"\x0fVERDICT_UNKNOWN\x10\x042\xd1\x04\n" +
+	"\x0fVERDICT_UNKNOWN\x10\x042\xc1\x05\n" +
 	"\x12AttestationService\x12X\n" +
 	"\x17VerifyContainerEvidence\x12\x1d.attestation.v1.VerifyRequest\x1a\x1e.attestation.v1.VerifyResponse\x12k\n" +
 	"\x12SetReferenceValues\x12).attestation.v1.SetReferenceValuesRequest\x1a*.attestation.v1.SetReferenceValuesResponse\x12`\n" +
 	"\x12GetReferenceValues\x12).attestation.v1.GetReferenceValuesRequest\x1a\x1f.attestation.v1.ReferenceValues\x12G\n" +
-	"\x06Health\x12\x1d.attestation.v1.HealthRequest\x1a\x1e.attestation.v1.HealthResponse\x12e\n" +
+	"\x06Health\x12\x1d.attestation.v1.HealthRequest\x1a\x1e.attestation.v1.HealthResponse\x12n\n" +
+	"\x13UpdateLatestVerdict\x12*.attestation.v1.UpdateLatestVerdictRequest\x1a+.attestation.v1.UpdateLatestVerdictResponse\x12e\n" +
 	"\x10GetLatestVerdict\x12'.attestation.v1.GetLatestVerdictRequest\x1a(.attestation.v1.GetLatestVerdictResponse\x12b\n" +
 	"\x13WatchVerdictUpdates\x12*.attestation.v1.WatchVerdictUpdatesRequest\x1a\x1d.attestation.v1.VerdictUpdate0\x01BCZAgithub.com/trustfncall/attestation-service/proto/v1;attestationv1b\x06proto3"
 
@@ -1271,24 +1403,26 @@ func file_v1_attestation_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_attestation_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_v1_attestation_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_v1_attestation_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_v1_attestation_proto_goTypes = []any{
-	(Verdict)(0),                       // 0: attestation.v1.Verdict
-	(*VerifyRequest)(nil),              // 1: attestation.v1.VerifyRequest
-	(*MeasurementEntry)(nil),           // 2: attestation.v1.MeasurementEntry
-	(*VerifyResponse)(nil),             // 3: attestation.v1.VerifyResponse
-	(*VerificationDetails)(nil),        // 4: attestation.v1.VerificationDetails
-	(*SetReferenceValuesRequest)(nil),  // 5: attestation.v1.SetReferenceValuesRequest
-	(*SetReferenceValuesResponse)(nil), // 6: attestation.v1.SetReferenceValuesResponse
-	(*GetReferenceValuesRequest)(nil),  // 7: attestation.v1.GetReferenceValuesRequest
-	(*ReferenceValues)(nil),            // 8: attestation.v1.ReferenceValues
-	(*ReferenceEntry)(nil),             // 9: attestation.v1.ReferenceEntry
-	(*HealthRequest)(nil),              // 10: attestation.v1.HealthRequest
-	(*HealthResponse)(nil),             // 11: attestation.v1.HealthResponse
-	(*GetLatestVerdictRequest)(nil),    // 12: attestation.v1.GetLatestVerdictRequest
-	(*GetLatestVerdictResponse)(nil),   // 13: attestation.v1.GetLatestVerdictResponse
-	(*WatchVerdictUpdatesRequest)(nil), // 14: attestation.v1.WatchVerdictUpdatesRequest
-	(*VerdictUpdate)(nil),              // 15: attestation.v1.VerdictUpdate
+	(Verdict)(0),                        // 0: attestation.v1.Verdict
+	(*VerifyRequest)(nil),               // 1: attestation.v1.VerifyRequest
+	(*MeasurementEntry)(nil),            // 2: attestation.v1.MeasurementEntry
+	(*VerifyResponse)(nil),              // 3: attestation.v1.VerifyResponse
+	(*VerificationDetails)(nil),         // 4: attestation.v1.VerificationDetails
+	(*SetReferenceValuesRequest)(nil),   // 5: attestation.v1.SetReferenceValuesRequest
+	(*SetReferenceValuesResponse)(nil),  // 6: attestation.v1.SetReferenceValuesResponse
+	(*GetReferenceValuesRequest)(nil),   // 7: attestation.v1.GetReferenceValuesRequest
+	(*ReferenceValues)(nil),             // 8: attestation.v1.ReferenceValues
+	(*ReferenceEntry)(nil),              // 9: attestation.v1.ReferenceEntry
+	(*HealthRequest)(nil),               // 10: attestation.v1.HealthRequest
+	(*HealthResponse)(nil),              // 11: attestation.v1.HealthResponse
+	(*UpdateLatestVerdictRequest)(nil),  // 12: attestation.v1.UpdateLatestVerdictRequest
+	(*UpdateLatestVerdictResponse)(nil), // 13: attestation.v1.UpdateLatestVerdictResponse
+	(*GetLatestVerdictRequest)(nil),     // 14: attestation.v1.GetLatestVerdictRequest
+	(*GetLatestVerdictResponse)(nil),    // 15: attestation.v1.GetLatestVerdictResponse
+	(*WatchVerdictUpdatesRequest)(nil),  // 16: attestation.v1.WatchVerdictUpdatesRequest
+	(*VerdictUpdate)(nil),               // 17: attestation.v1.VerdictUpdate
 }
 var file_v1_attestation_proto_depIdxs = []int32{
 	2,  // 0: attestation.v1.VerifyRequest.measurements:type_name -> attestation.v1.MeasurementEntry
@@ -1296,25 +1430,28 @@ var file_v1_attestation_proto_depIdxs = []int32{
 	4,  // 2: attestation.v1.VerifyResponse.details:type_name -> attestation.v1.VerificationDetails
 	8,  // 3: attestation.v1.SetReferenceValuesRequest.reference_values:type_name -> attestation.v1.ReferenceValues
 	9,  // 4: attestation.v1.ReferenceValues.entries:type_name -> attestation.v1.ReferenceEntry
-	0,  // 5: attestation.v1.GetLatestVerdictResponse.verdict:type_name -> attestation.v1.Verdict
-	0,  // 6: attestation.v1.VerdictUpdate.verdict:type_name -> attestation.v1.Verdict
-	1,  // 7: attestation.v1.AttestationService.VerifyContainerEvidence:input_type -> attestation.v1.VerifyRequest
-	5,  // 8: attestation.v1.AttestationService.SetReferenceValues:input_type -> attestation.v1.SetReferenceValuesRequest
-	7,  // 9: attestation.v1.AttestationService.GetReferenceValues:input_type -> attestation.v1.GetReferenceValuesRequest
-	10, // 10: attestation.v1.AttestationService.Health:input_type -> attestation.v1.HealthRequest
-	12, // 11: attestation.v1.AttestationService.GetLatestVerdict:input_type -> attestation.v1.GetLatestVerdictRequest
-	14, // 12: attestation.v1.AttestationService.WatchVerdictUpdates:input_type -> attestation.v1.WatchVerdictUpdatesRequest
-	3,  // 13: attestation.v1.AttestationService.VerifyContainerEvidence:output_type -> attestation.v1.VerifyResponse
-	6,  // 14: attestation.v1.AttestationService.SetReferenceValues:output_type -> attestation.v1.SetReferenceValuesResponse
-	8,  // 15: attestation.v1.AttestationService.GetReferenceValues:output_type -> attestation.v1.ReferenceValues
-	11, // 16: attestation.v1.AttestationService.Health:output_type -> attestation.v1.HealthResponse
-	13, // 17: attestation.v1.AttestationService.GetLatestVerdict:output_type -> attestation.v1.GetLatestVerdictResponse
-	15, // 18: attestation.v1.AttestationService.WatchVerdictUpdates:output_type -> attestation.v1.VerdictUpdate
-	13, // [13:19] is the sub-list for method output_type
-	7,  // [7:13] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	0,  // 5: attestation.v1.UpdateLatestVerdictRequest.verdict:type_name -> attestation.v1.Verdict
+	0,  // 6: attestation.v1.GetLatestVerdictResponse.verdict:type_name -> attestation.v1.Verdict
+	0,  // 7: attestation.v1.VerdictUpdate.verdict:type_name -> attestation.v1.Verdict
+	1,  // 8: attestation.v1.AttestationService.VerifyContainerEvidence:input_type -> attestation.v1.VerifyRequest
+	5,  // 9: attestation.v1.AttestationService.SetReferenceValues:input_type -> attestation.v1.SetReferenceValuesRequest
+	7,  // 10: attestation.v1.AttestationService.GetReferenceValues:input_type -> attestation.v1.GetReferenceValuesRequest
+	10, // 11: attestation.v1.AttestationService.Health:input_type -> attestation.v1.HealthRequest
+	12, // 12: attestation.v1.AttestationService.UpdateLatestVerdict:input_type -> attestation.v1.UpdateLatestVerdictRequest
+	14, // 13: attestation.v1.AttestationService.GetLatestVerdict:input_type -> attestation.v1.GetLatestVerdictRequest
+	16, // 14: attestation.v1.AttestationService.WatchVerdictUpdates:input_type -> attestation.v1.WatchVerdictUpdatesRequest
+	3,  // 15: attestation.v1.AttestationService.VerifyContainerEvidence:output_type -> attestation.v1.VerifyResponse
+	6,  // 16: attestation.v1.AttestationService.SetReferenceValues:output_type -> attestation.v1.SetReferenceValuesResponse
+	8,  // 17: attestation.v1.AttestationService.GetReferenceValues:output_type -> attestation.v1.ReferenceValues
+	11, // 18: attestation.v1.AttestationService.Health:output_type -> attestation.v1.HealthResponse
+	13, // 19: attestation.v1.AttestationService.UpdateLatestVerdict:output_type -> attestation.v1.UpdateLatestVerdictResponse
+	15, // 20: attestation.v1.AttestationService.GetLatestVerdict:output_type -> attestation.v1.GetLatestVerdictResponse
+	17, // 21: attestation.v1.AttestationService.WatchVerdictUpdates:output_type -> attestation.v1.VerdictUpdate
+	15, // [15:22] is the sub-list for method output_type
+	8,  // [8:15] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_v1_attestation_proto_init() }
@@ -1328,7 +1465,7 @@ func file_v1_attestation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_attestation_proto_rawDesc), len(file_v1_attestation_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   15,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

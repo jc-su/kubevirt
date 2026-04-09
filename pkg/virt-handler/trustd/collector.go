@@ -72,6 +72,18 @@ type AttestationVerdictWatcher interface {
 	) error
 }
 
+// AttestationVerdictPublisher optionally pushes local revocation state into the authority.
+type AttestationVerdictPublisher interface {
+	UpdateLatestVerdict(
+		ctx context.Context,
+		subjects []string,
+		verdict v1.ContainerTrustVerdict,
+		message string,
+		policyAction RemediationAction,
+		source string,
+	) error
+}
+
 // VerificationResult is the verdict from the attestation service.
 type VerificationResult struct {
 	Verdict          v1.ContainerTrustVerdict
@@ -489,6 +501,13 @@ func (c *TrustStateCollector) handleEvent(event ContainerEvent) {
 		if !strings.Contains(state.VerdictMessage, "heartbeat timeout detected by trustd") {
 			state.VerdictMessage = appendMessage(state.VerdictMessage, "heartbeat timeout detected by trustd")
 		}
+		c.publishLatestVerdict(
+			event.CgroupPath,
+			state.Verdict,
+			state.VerdictMessage,
+			c.remediationPolicy.actionForVerdict(state.Verdict),
+			"kubevirt/trustd/heartbeat-miss",
+		)
 		if state.LastHeartbeat == nil && event.Timestamp > 0 {
 			hb := metav1.NewTime(time.Unix(event.Timestamp, 0))
 			state.LastHeartbeat = &hb
@@ -523,6 +542,13 @@ func (c *TrustStateCollector) handleRemediationLifecycleEvent(event ContainerEve
 		state := c.currentStateOrUnknown(event.CgroupPath)
 		state.Verdict = v1.ContainerTrustVerdictStale
 		state.VerdictMessage = appendMessage(state.VerdictMessage, "remediation started")
+		c.publishLatestVerdict(
+			event.CgroupPath,
+			state.Verdict,
+			state.VerdictMessage,
+			RemediationActionRestart,
+			"kubevirt/trustd/remediation-begin",
+		)
 		c.setState(state)
 		return true
 
@@ -536,6 +562,13 @@ func (c *TrustStateCollector) handleRemediationLifecycleEvent(event ContainerEve
 		state := c.currentStateOrUnknown(event.CgroupPath)
 		state.Verdict = v1.ContainerTrustVerdictUntrusted
 		state.VerdictMessage = appendMessage(state.VerdictMessage, detail)
+		c.publishLatestVerdict(
+			event.CgroupPath,
+			state.Verdict,
+			state.VerdictMessage,
+			RemediationActionAlert,
+			"kubevirt/trustd/remediation-failed",
+		)
 		c.setState(state)
 		return true
 
@@ -806,6 +839,41 @@ func (c *TrustStateCollector) maybeRemediate(state *v1.ContainerTrustState, reco
 			log.DefaultLogger().Infof("Requested restart remediation for container %s due to verdict %s", state.ContainerID, state.Verdict)
 			state.VerdictMessage = appendMessage(state.VerdictMessage, "remediation action restart requested")
 		}
+	}
+}
+
+func (c *TrustStateCollector) publishLatestVerdict(
+	cgroupPath string,
+	verdict v1.ContainerTrustVerdict,
+	message string,
+	action RemediationAction,
+	source string,
+) {
+	publisher, ok := c.verifier.(AttestationVerdictPublisher)
+	if !ok || publisher == nil {
+		return
+	}
+
+	canonical := canonicalCgroupPath(cgroupPath)
+	if canonical == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultRequestTimeout)
+	defer cancel()
+	if err := publisher.UpdateLatestVerdict(
+		ctx,
+		[]string{fmt.Sprintf("cgroup://%s", canonical)},
+		verdict,
+		message,
+		normalizeRemediationAction(action),
+		source,
+	); err != nil {
+		log.DefaultLogger().V(4).Infof(
+			"Failed to publish latest verdict for %s: %v",
+			canonical,
+			err,
+		)
 	}
 }
 

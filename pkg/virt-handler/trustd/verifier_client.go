@@ -36,6 +36,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	v1 "kubevirt.io/api/core/v1"
@@ -44,6 +45,7 @@ import (
 
 const (
 	methodVerifyContainerEvidence = "/attestation.v1.AttestationService/VerifyContainerEvidence"
+	methodUpdateLatestVerdict     = "/attestation.v1.AttestationService/UpdateLatestVerdict"
 	methodWatchVerdictUpdates     = "/attestation.v1.AttestationService/WatchVerdictUpdates"
 )
 
@@ -58,6 +60,7 @@ const (
 	attestationTLSClientCertEnv = "TEE_MCP_ATTESTATION_CLIENT_CERT"
 	attestationTLSClientKeyEnv  = "TEE_MCP_ATTESTATION_CLIENT_KEY"
 	attestationTLSServerNameEnv = "TEE_MCP_ATTESTATION_SERVER_NAME"
+	attestationUpdateTokenEnv   = "TEE_MCP_ATTESTATION_UPDATE_TOKEN_FILE"
 )
 
 // RemoteAttestationVerifier calls the external attestation-service over gRPC.
@@ -236,6 +239,25 @@ func verifierRequestContext(ctx context.Context) (context.Context, context.Cance
 	return context.WithTimeout(ctx, defaultVerifierRequestTimeout)
 }
 
+func loadUpdateLatestVerdictToken() (string, error) {
+	tokenPath := strings.TrimSpace(os.Getenv(attestationUpdateTokenEnv))
+	if tokenPath == "" {
+		return "", fmt.Errorf("%s is required for UpdateLatestVerdict", attestationUpdateTokenEnv)
+	}
+
+	tokenBytes, err := os.ReadFile(tokenPath)
+	if err != nil {
+		return "", fmt.Errorf("read %s %q: %w", attestationUpdateTokenEnv, tokenPath, err)
+	}
+
+	token := strings.TrimSpace(string(tokenBytes))
+	if token == "" {
+		return "", fmt.Errorf("%s file %q is empty", attestationUpdateTokenEnv, tokenPath)
+	}
+
+	return token, nil
+}
+
 func (v *RemoteAttestationVerifier) VerifyEvidence(ctx context.Context, evidence *AttestContainerResponse) (*VerificationResult, error) {
 	if evidence == nil {
 		return nil, fmt.Errorf("evidence is nil")
@@ -363,6 +385,44 @@ func (v *RemoteAttestationVerifier) WatchVerdictUpdates(
 	}
 }
 
+func (v *RemoteAttestationVerifier) UpdateLatestVerdict(
+	ctx context.Context,
+	subjects []string,
+	verdict v1.ContainerTrustVerdict,
+	message string,
+	policyAction RemediationAction,
+	source string,
+) error {
+	reqCtx, cancel := verifierRequestContext(ctx)
+	defer cancel()
+	token, err := loadUpdateLatestVerdictToken()
+	if err != nil {
+		return err
+	}
+	reqCtx = metadata.AppendToOutgoingContext(reqCtx, "x-attestation-update-token", token)
+
+	conn, err := v.getConn(reqCtx)
+	if err != nil {
+		return fmt.Errorf("dial attestation-service %s: %w", v.address, err)
+	}
+
+	req := &attestationv1.UpdateLatestVerdictRequest{
+		Subjects:     subjects,
+		Verdict:      mapKubevirtVerdict(verdict),
+		Message:      message,
+		PolicyAction: strings.ToLower(strings.TrimSpace(string(policyAction))),
+		Source:       source,
+	}
+	resp := &attestationv1.UpdateLatestVerdictResponse{}
+	if err := conn.Invoke(reqCtx, methodUpdateLatestVerdict, req, resp); err != nil {
+		if shouldResetVerifierConn(err) {
+			v.resetConn()
+		}
+		return fmt.Errorf("update latest verdict: %w", err)
+	}
+	return nil
+}
+
 func mapVerifierVerdict(verdict attestationv1.Verdict) v1.ContainerTrustVerdict {
 	switch verdict {
 	case attestationv1.Verdict_VERDICT_TRUSTED:
@@ -375,6 +435,21 @@ func mapVerifierVerdict(verdict attestationv1.Verdict) v1.ContainerTrustVerdict 
 		return v1.ContainerTrustVerdictUnknown
 	default:
 		return v1.ContainerTrustVerdictUnknown
+	}
+}
+
+func mapKubevirtVerdict(verdict v1.ContainerTrustVerdict) attestationv1.Verdict {
+	switch verdict {
+	case v1.ContainerTrustVerdictTrusted:
+		return attestationv1.Verdict_VERDICT_TRUSTED
+	case v1.ContainerTrustVerdictUntrusted:
+		return attestationv1.Verdict_VERDICT_UNTRUSTED
+	case v1.ContainerTrustVerdictStale:
+		return attestationv1.Verdict_VERDICT_STALE
+	case v1.ContainerTrustVerdictUnknown:
+		return attestationv1.Verdict_VERDICT_UNKNOWN
+	default:
+		return attestationv1.Verdict_VERDICT_UNKNOWN
 	}
 }
 

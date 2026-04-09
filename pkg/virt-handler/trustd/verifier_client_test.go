@@ -19,7 +19,12 @@
 
 package trustd
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestMapVerifierPolicyAction(t *testing.T) {
 	tests := []struct {
@@ -62,5 +67,34 @@ func TestMapVerifierPolicyAction(t *testing.T) {
 				t.Fatalf("expected action %q, got %q", tc.expectedAction, action)
 			}
 		})
+	}
+}
+
+func TestLoadUpdateLatestVerdictTokenRequiresEnv(t *testing.T) {
+	t.Setenv(attestationUpdateTokenEnv, "")
+
+	_, err := loadUpdateLatestVerdictToken()
+	if err == nil {
+		t.Fatalf("expected missing token env to fail")
+	}
+	if !strings.Contains(err.Error(), attestationUpdateTokenEnv) {
+		t.Fatalf("expected error to mention env var, got %v", err)
+	}
+}
+
+func TestLoadUpdateLatestVerdictTokenReadsTrimmedFile(t *testing.T) {
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "update-token")
+	if err := os.WriteFile(tokenPath, []byte("  test-token\n"), 0o600); err != nil {
+		t.Fatalf("write token file: %v", err)
+	}
+	t.Setenv(attestationUpdateTokenEnv, tokenPath)
+
+	token, err := loadUpdateLatestVerdictToken()
+	if err != nil {
+		t.Fatalf("expected token load to succeed: %v", err)
+	}
+	if token != "test-token" {
+		t.Fatalf("expected trimmed token, got %q", token)
 	}
 }

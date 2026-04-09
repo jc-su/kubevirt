@@ -96,6 +96,7 @@ func (f *fakeCollectorClient) ReportHeartbeat(_ context.Context, cgroupPath stri
 type fakeVerifier struct {
 	result VerificationResult
 	err    error
+	updates []fakeVerifierUpdate
 }
 
 func (f *fakeVerifier) VerifyEvidence(context.Context, *AttestContainerResponse) (*VerificationResult, error) {
@@ -104,6 +105,32 @@ func (f *fakeVerifier) VerifyEvidence(context.Context, *AttestContainerResponse)
 	}
 	result := f.result
 	return &result, nil
+}
+
+type fakeVerifierUpdate struct {
+	subjects []string
+	verdict  v1.ContainerTrustVerdict
+	message  string
+	action   RemediationAction
+	source   string
+}
+
+func (f *fakeVerifier) UpdateLatestVerdict(
+	_ context.Context,
+	subjects []string,
+	verdict v1.ContainerTrustVerdict,
+	message string,
+	policyAction RemediationAction,
+	source string,
+) error {
+	f.updates = append(f.updates, fakeVerifierUpdate{
+		subjects: append([]string(nil), subjects...),
+		verdict:  verdict,
+		message:  message,
+		action:   policyAction,
+		source:   source,
+	})
+	return nil
 }
 
 func TestCollectorRequestsRestartForUntrustedVerdict(t *testing.T) {
@@ -247,10 +274,11 @@ func TestCollectorUsesVerifierPolicyActionOverFallback(t *testing.T) {
 
 func TestCollectorAppliesStalePolicyOnHeartbeatMiss(t *testing.T) {
 	client := &fakeCollectorClient{}
+	verifier := &fakeVerifier{}
 	policy := DefaultRemediationPolicy()
 	policy.OnStale = RemediationActionRestart
 
-	collector := NewTrustStateCollector(client, nil, nil, nil, policy)
+	collector := NewTrustStateCollector(client, verifier, nil, nil, policy)
 	collector.handleEvent(ContainerEvent{
 		EventType:  EventTypeHeartbeatMiss,
 		CgroupPath: "cg1",
@@ -263,6 +291,15 @@ func TestCollectorAppliesStalePolicyOnHeartbeatMiss(t *testing.T) {
 	states := collector.GetStates()
 	if len(states) != 1 || states[0].Verdict != v1.ContainerTrustVerdictStale {
 		t.Fatalf("expected stale state entry, got %#v", states)
+	}
+	if len(verifier.updates) != 1 {
+		t.Fatalf("expected one published authority update, got %d", len(verifier.updates))
+	}
+	if verifier.updates[0].source != "kubevirt/trustd/heartbeat-miss" {
+		t.Fatalf("unexpected update source: %s", verifier.updates[0].source)
+	}
+	if len(verifier.updates[0].subjects) != 1 || verifier.updates[0].subjects[0] != "cgroup:///cg1" {
+		t.Fatalf("unexpected update subjects: %#v", verifier.updates[0].subjects)
 	}
 }
 
@@ -402,6 +439,39 @@ func TestCollectorRemediationLifecycleKeepsFailClosedWhenReattestationFails(t *t
 	}
 	if !strings.Contains(states[0].VerdictMessage, "pending rebootstrap") {
 		t.Fatalf("expected pending rebootstrap marker, got %q", states[0].VerdictMessage)
+	}
+}
+
+func TestCollectorPublishesRemediationLifecycleUpdates(t *testing.T) {
+	client := &fakeCollectorClient{}
+	verifier := &fakeVerifier{}
+	collector := NewTrustStateCollector(client, verifier, nil, nil, DefaultRemediationPolicy())
+
+	collector.handleEvent(ContainerEvent{
+		EventType:  EventTypeAttestBegin,
+		CgroupPath: "cg1",
+		Detail:     "remediation_begin action=restart",
+	})
+	collector.handleEvent(ContainerEvent{
+		EventType:  EventTypeAttestEnd,
+		CgroupPath: "cg1",
+		Detail:     "remediation_failed action=restart",
+	})
+
+	if len(verifier.updates) != 2 {
+		t.Fatalf("expected two published authority updates, got %d", len(verifier.updates))
+	}
+	if verifier.updates[0].verdict != v1.ContainerTrustVerdictStale {
+		t.Fatalf("expected stale begin verdict, got %s", verifier.updates[0].verdict)
+	}
+	if verifier.updates[0].source != "kubevirt/trustd/remediation-begin" {
+		t.Fatalf("unexpected remediation begin source: %s", verifier.updates[0].source)
+	}
+	if verifier.updates[1].verdict != v1.ContainerTrustVerdictUntrusted {
+		t.Fatalf("expected untrusted failed verdict, got %s", verifier.updates[1].verdict)
+	}
+	if verifier.updates[1].source != "kubevirt/trustd/remediation-failed" {
+		t.Fatalf("unexpected remediation failed source: %s", verifier.updates[1].source)
 	}
 }
 
