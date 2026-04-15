@@ -20,6 +20,7 @@
 package virthandler
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -45,12 +46,16 @@ type cvmTrustManager struct {
 	clients           map[string]*trustd.Client              // key: vmi.UID
 	verifier          trustd.AttestationVerifier
 	remediationPolicy trustd.RemediationPolicy
+	// Track which container specs have been delivered to avoid re-sending
+	// on every reconcile tick. Key: vmi.UID, value: set of container names.
+	deliveredSpecs map[string]map[string]bool
 }
 
 func newCVMTrustManager() *cvmTrustManager {
 	return &cvmTrustManager{
 		collectors:        make(map[string]*trustd.TrustStateCollector),
 		clients:           make(map[string]*trustd.Client),
+		deliveredSpecs:    make(map[string]map[string]bool),
 		verifier:          newAttestationVerifierFromEnv(),
 		remediationPolicy: remediationPolicyFromEnv(),
 	}
@@ -120,6 +125,7 @@ func (m *cvmTrustManager) stopCollector(vmi *v1.VirtualMachineInstance) {
 	if exists {
 		delete(m.collectors, uid)
 		delete(m.clients, uid)
+		delete(m.deliveredSpecs, uid)
 	}
 	m.mu.Unlock()
 
@@ -150,6 +156,58 @@ func (m *cvmTrustManager) getClient(vmi *v1.VirtualMachineInstance) *trustd.Clie
 	return m.clients[uid]
 }
 
+// deliverContainerSpecs reads the VMI annotation, parses container specs,
+// and calls trustd.StartContainer for each spec not yet delivered. This is
+// the wiring that replaces cloud-init runcmd — containers are now started
+// by the host-side virt-handler through trustd's lifecycle RPCs.
+func (m *cvmTrustManager) deliverContainerSpecs(vmi *v1.VirtualMachineInstance) {
+	uid := string(vmi.UID)
+	client := m.getClient(vmi)
+	if client == nil {
+		return
+	}
+
+	specs, err := trustd.ParseContainerSpecs(vmi)
+	if err != nil {
+		log.DefaultLogger().Object(vmi).Warningf("Failed to parse container specs from annotation: %v", err)
+		return
+	}
+	if len(specs) == 0 {
+		return
+	}
+
+	m.mu.Lock()
+	if m.deliveredSpecs[uid] == nil {
+		m.deliveredSpecs[uid] = make(map[string]bool)
+	}
+	delivered := m.deliveredSpecs[uid]
+	m.mu.Unlock()
+
+	ctx := context.Background()
+	for _, spec := range specs {
+		if delivered[spec.Name] {
+			continue
+		}
+
+		req := spec.ToStartContainerRequest()
+		log.DefaultLogger().Object(vmi).Infof("Delivering container spec to trustd: %s (image=%s)", req.Name, req.Image)
+		resp, err := client.StartContainer(ctx, req)
+		if err != nil {
+			log.DefaultLogger().Object(vmi).Warningf("StartContainer %s failed: %v", req.Name, err)
+			continue
+		}
+		if !resp.Started {
+			log.DefaultLogger().Object(vmi).Warningf("StartContainer %s returned started=false: %s", req.Name, resp.Error)
+			continue
+		}
+
+		log.DefaultLogger().Object(vmi).Infof("Container %s started in CVM (cgroup=%s, id=%s)", req.Name, resp.CgroupPath, resp.ContainerID)
+		m.mu.Lock()
+		m.deliveredSpecs[uid][spec.Name] = true
+		m.mu.Unlock()
+	}
+}
+
 // stopAll stops all collectors. Called during controller shutdown.
 func (m *cvmTrustManager) stopAll() {
 	m.mu.Lock()
@@ -178,6 +236,12 @@ func updateCVMTrustConditions(vmi *v1.VirtualMachineInstance, trustMgr *cvmTrust
 	}
 
 	connected := trustMgr.ensureCollector(vmi, trustMgr.verifier)
+
+	// Once connected, deliver any container specs from the VMI annotation
+	// that haven't been sent yet. This replaces the cloud-init runcmd path.
+	if connected {
+		trustMgr.deliverContainerSpecs(vmi)
+	}
 
 	// Update CVMAgentConnected condition
 	if connected && !condManager.HasCondition(vmi, v1.VirtualMachineInstanceCVMAgentConnected) {

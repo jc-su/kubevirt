@@ -139,6 +139,9 @@ type trustdClient interface {
 	StartHeartbeatMonitor(ctx context.Context, cgroupPath string, timeoutSeconds uint32) error
 	StopHeartbeatMonitor(ctx context.Context, cgroupPath string) error
 	ReportHeartbeat(ctx context.Context, cgroupPath string) error
+	// Container lifecycle (kata-agent-like).
+	StartContainer(ctx context.Context, req *StartContainerRequest) (*StartContainerResponse, error)
+	StopContainer(ctx context.Context, req *StopContainerRequest) (*StopContainerResponse, error)
 }
 
 // TrustStateCollector keeps VMI trust states synchronized with trustd.
@@ -526,6 +529,63 @@ func (c *TrustStateCollector) handleEvent(event ContainerEvent) {
 		delete(c.stateMap, event.CgroupPath)
 		delete(c.lastRemediation, event.CgroupPath)
 		delete(c.pendingRebootstrap, event.CgroupPath)
+		c.mu.Unlock()
+
+	case EventTypeReady:
+		// The container's ready-wrapper detected the [TRUSTWEAVE_READY] marker.
+		// Update the state with phase=Ready and record ReadyAt timestamp.
+		c.mu.Lock()
+		key := event.CgroupPath
+		if key == "" && event.ContainerName != "" {
+			// READY events from the lifecycle manager may not have a cgroup
+			// path yet — look up by container name.
+			for k, st := range c.stateMap {
+				if st.ContainerName == event.ContainerName {
+					key = k
+					break
+				}
+			}
+		}
+		if key != "" {
+			if state, ok := c.stateMap[key]; ok {
+				state.Phase = v1.ContainerTrustPhaseReady
+				now := metav1.Now()
+				state.ReadyAt = &now
+				c.stateMap[key] = state
+			}
+		}
+		c.mu.Unlock()
+
+	case EventTypePhaseChange:
+		// Generic phase transition — update the stored phase.
+		c.mu.Lock()
+		key := event.CgroupPath
+		if key == "" && event.ContainerName != "" {
+			for k, st := range c.stateMap {
+				if st.ContainerName == event.ContainerName {
+					key = k
+					break
+				}
+			}
+		}
+		if key != "" {
+			if state, ok := c.stateMap[key]; ok {
+				state.Phase = protoPhaseToAPI(event.Phase)
+				if event.ContainerName != "" {
+					state.ContainerName = event.ContainerName
+				}
+				c.stateMap[key] = state
+			} else {
+				// New lifecycle-managed container that doesn't have a securityfs
+				// entry yet (PENDING phase). Create a placeholder.
+				c.stateMap[key] = v1.ContainerTrustState{
+					ContainerID:   key,
+					ContainerName: event.ContainerName,
+					Phase:         protoPhaseToAPI(event.Phase),
+					Verdict:       v1.ContainerTrustVerdictUnknown,
+				}
+			}
+		}
 		c.mu.Unlock()
 	}
 }
@@ -943,4 +1003,31 @@ func heartbeatIntervalDuration(raw *int32) time.Duration {
 		return 0
 	}
 	return time.Duration(interval) * time.Second
+}
+
+// protoPhaseToAPI maps the proto ContainerPhase int32 to the API
+// ContainerTrustPhase string. The proto values are defined in trustd.proto.
+func protoPhaseToAPI(phase int32) v1.ContainerTrustPhase {
+	switch phase {
+	case 0:
+		return v1.ContainerTrustPhaseUnmanaged
+	case 1:
+		return v1.ContainerTrustPhasePending
+	case 2:
+		return v1.ContainerTrustPhaseRunning
+	case 3:
+		return v1.ContainerTrustPhaseReady
+	case 4:
+		return v1.ContainerTrustPhaseTrusted
+	case 5:
+		return v1.ContainerTrustPhaseUntrusted
+	case 6:
+		return v1.ContainerTrustPhaseRemediating
+	case 7:
+		return v1.ContainerTrustPhaseStopped
+	case 8:
+		return v1.ContainerTrustPhaseFailed
+	default:
+		return v1.ContainerTrustPhaseUnmanaged
+	}
 }

@@ -28,7 +28,77 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// EventType mirrors the kernel's IMA_CN_EVENT_* constants.
+// ContainerPhase tracks where a lifecycle-managed container is in its
+// state machine. Containers discovered passively by the securityfs
+// watcher (not started via StartContainer) remain at PHASE_UNMANAGED.
+type ContainerPhase int32
+
+const (
+	ContainerPhase_CONTAINER_PHASE_UNMANAGED   ContainerPhase = 0 // legacy: not started via StartContainer
+	ContainerPhase_CONTAINER_PHASE_PENDING     ContainerPhase = 1 // StartContainer received, not yet created
+	ContainerPhase_CONTAINER_PHASE_RUNNING     ContainerPhase = 2 // container process is running, IMA measured
+	ContainerPhase_CONTAINER_PHASE_READY       ContainerPhase = 3 // [TRUSTWEAVE_READY] detected on stdout
+	ContainerPhase_CONTAINER_PHASE_TRUSTED     ContainerPhase = 4 // attestation-service returned TRUSTED
+	ContainerPhase_CONTAINER_PHASE_UNTRUSTED   ContainerPhase = 5 // attestation failed after measurement change
+	ContainerPhase_CONTAINER_PHASE_REMEDIATING ContainerPhase = 6 // stop + remove + recreate in progress
+	ContainerPhase_CONTAINER_PHASE_STOPPED     ContainerPhase = 7 // StopContainer completed
+	ContainerPhase_CONTAINER_PHASE_FAILED      ContainerPhase = 8 // start or remediation failed
+)
+
+// Enum value maps for ContainerPhase.
+var (
+	ContainerPhase_name = map[int32]string{
+		0: "CONTAINER_PHASE_UNMANAGED",
+		1: "CONTAINER_PHASE_PENDING",
+		2: "CONTAINER_PHASE_RUNNING",
+		3: "CONTAINER_PHASE_READY",
+		4: "CONTAINER_PHASE_TRUSTED",
+		5: "CONTAINER_PHASE_UNTRUSTED",
+		6: "CONTAINER_PHASE_REMEDIATING",
+		7: "CONTAINER_PHASE_STOPPED",
+		8: "CONTAINER_PHASE_FAILED",
+	}
+	ContainerPhase_value = map[string]int32{
+		"CONTAINER_PHASE_UNMANAGED":   0,
+		"CONTAINER_PHASE_PENDING":     1,
+		"CONTAINER_PHASE_RUNNING":     2,
+		"CONTAINER_PHASE_READY":       3,
+		"CONTAINER_PHASE_TRUSTED":     4,
+		"CONTAINER_PHASE_UNTRUSTED":   5,
+		"CONTAINER_PHASE_REMEDIATING": 6,
+		"CONTAINER_PHASE_STOPPED":     7,
+		"CONTAINER_PHASE_FAILED":      8,
+	}
+)
+
+func (x ContainerPhase) Enum() *ContainerPhase {
+	p := new(ContainerPhase)
+	*p = x
+	return p
+}
+
+func (x ContainerPhase) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ContainerPhase) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_trustd_proto_enumTypes[0].Descriptor()
+}
+
+func (ContainerPhase) Type() protoreflect.EnumType {
+	return &file_v1_trustd_proto_enumTypes[0]
+}
+
+func (x ContainerPhase) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ContainerPhase.Descriptor instead.
+func (ContainerPhase) EnumDescriptor() ([]byte, []int) {
+	return file_v1_trustd_proto_rawDescGZIP(), []int{0}
+}
+
+// EventType mirrors the kernel's IMA_CN_EVENT_* constants plus lifecycle events.
 type EventType int32
 
 const (
@@ -40,6 +110,9 @@ const (
 	EventType_EVENT_TYPE_REMOVED        EventType = 5
 	EventType_EVENT_TYPE_ATTEST_BEGIN   EventType = 6
 	EventType_EVENT_TYPE_ATTEST_END     EventType = 7
+	// Lifecycle events (emitted by the lifecycle manager, not the kernel):
+	EventType_EVENT_TYPE_READY        EventType = 8 // [TRUSTWEAVE_READY] detected on container stdout
+	EventType_EVENT_TYPE_PHASE_CHANGE EventType = 9 // container phase transitioned (see ContainerPhase)
 )
 
 // Enum value maps for EventType.
@@ -53,6 +126,8 @@ var (
 		5: "EVENT_TYPE_REMOVED",
 		6: "EVENT_TYPE_ATTEST_BEGIN",
 		7: "EVENT_TYPE_ATTEST_END",
+		8: "EVENT_TYPE_READY",
+		9: "EVENT_TYPE_PHASE_CHANGE",
 	}
 	EventType_value = map[string]int32{
 		"EVENT_TYPE_UNSPECIFIED":    0,
@@ -63,6 +138,8 @@ var (
 		"EVENT_TYPE_REMOVED":        5,
 		"EVENT_TYPE_ATTEST_BEGIN":   6,
 		"EVENT_TYPE_ATTEST_END":     7,
+		"EVENT_TYPE_READY":          8,
+		"EVENT_TYPE_PHASE_CHANGE":   9,
 	}
 )
 
@@ -77,11 +154,11 @@ func (x EventType) String() string {
 }
 
 func (EventType) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_trustd_proto_enumTypes[0].Descriptor()
+	return file_v1_trustd_proto_enumTypes[1].Descriptor()
 }
 
 func (EventType) Type() protoreflect.EnumType {
-	return &file_v1_trustd_proto_enumTypes[0]
+	return &file_v1_trustd_proto_enumTypes[1]
 }
 
 func (x EventType) Number() protoreflect.EnumNumber {
@@ -90,7 +167,59 @@ func (x EventType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use EventType.Descriptor instead.
 func (EventType) EnumDescriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{0}
+	return file_v1_trustd_proto_rawDescGZIP(), []int{1}
+}
+
+// RemediationMode controls how RestartContainer behaves for lifecycle-
+// managed containers. For unmanaged (legacy) containers, the mode is
+// always SIGNAL regardless of what the caller requests.
+type RemediationMode int32
+
+const (
+	RemediationMode_REMEDIATION_MODE_SIGNAL   RemediationMode = 0 // existing: SIGTERM/SIGKILL cgroup PIDs
+	RemediationMode_REMEDIATION_MODE_RECREATE RemediationMode = 1 // stop + remove + create from stored spec
+	RemediationMode_REMEDIATION_MODE_KILL     RemediationMode = 2 // stop + remove, no restart
+)
+
+// Enum value maps for RemediationMode.
+var (
+	RemediationMode_name = map[int32]string{
+		0: "REMEDIATION_MODE_SIGNAL",
+		1: "REMEDIATION_MODE_RECREATE",
+		2: "REMEDIATION_MODE_KILL",
+	}
+	RemediationMode_value = map[string]int32{
+		"REMEDIATION_MODE_SIGNAL":   0,
+		"REMEDIATION_MODE_RECREATE": 1,
+		"REMEDIATION_MODE_KILL":     2,
+	}
+)
+
+func (x RemediationMode) Enum() *RemediationMode {
+	p := new(RemediationMode)
+	*p = x
+	return p
+}
+
+func (x RemediationMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RemediationMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_trustd_proto_enumTypes[2].Descriptor()
+}
+
+func (RemediationMode) Type() protoreflect.EnumType {
+	return &file_v1_trustd_proto_enumTypes[2]
+}
+
+func (x RemediationMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RemediationMode.Descriptor instead.
+func (RemediationMode) EnumDescriptor() ([]byte, []int) {
+	return file_v1_trustd_proto_rawDescGZIP(), []int{2}
 }
 
 // AttestContainerRequest triggers attestation of a specific container.
@@ -468,8 +597,12 @@ type ContainerState struct {
 	LastHeartbeat       int64                  `protobuf:"varint,5,opt,name=last_heartbeat,json=lastHeartbeat,proto3" json:"last_heartbeat,omitempty"` // seconds since epoch, 0 if never
 	HeartbeatCount      int64                  `protobuf:"varint,6,opt,name=heartbeat_count,json=heartbeatCount,proto3" json:"heartbeat_count,omitempty"`
 	HeartbeatMonitoring bool                   `protobuf:"varint,7,opt,name=heartbeat_monitoring,json=heartbeatMonitoring,proto3" json:"heartbeat_monitoring,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Lifecycle fields (populated only for containers started via StartContainer).
+	Phase         ContainerPhase `protobuf:"varint,10,opt,name=phase,proto3,enum=trustd.v1.ContainerPhase" json:"phase,omitempty"`
+	ContainerName string         `protobuf:"bytes,11,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"` // Docker/containerd name (empty for unmanaged)
+	ContainerId   string         `protobuf:"bytes,12,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`       // Docker/containerd ID (empty for unmanaged)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ContainerState) Reset() {
@@ -551,6 +684,27 @@ func (x *ContainerState) GetHeartbeatMonitoring() bool {
 	return false
 }
 
+func (x *ContainerState) GetPhase() ContainerPhase {
+	if x != nil {
+		return x.Phase
+	}
+	return ContainerPhase_CONTAINER_PHASE_UNMANAGED
+}
+
+func (x *ContainerState) GetContainerName() string {
+	if x != nil {
+		return x.ContainerName
+	}
+	return ""
+}
+
+func (x *ContainerState) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
 // WatchEventsRequest subscribes to container events.
 type WatchEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -620,8 +774,11 @@ type ContainerEvent struct {
 	// Current RTMR3 at event time (hex):
 	Rtmr3            string `protobuf:"bytes,7,opt,name=rtmr3,proto3" json:"rtmr3,omitempty"`
 	MeasurementCount int64  `protobuf:"varint,8,opt,name=measurement_count,json=measurementCount,proto3" json:"measurement_count,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// For PHASE_CHANGE and READY events:
+	Phase         ContainerPhase `protobuf:"varint,9,opt,name=phase,proto3,enum=trustd.v1.ContainerPhase" json:"phase,omitempty"`
+	ContainerName string         `protobuf:"bytes,10,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ContainerEvent) Reset() {
@@ -708,6 +865,20 @@ func (x *ContainerEvent) GetMeasurementCount() int64 {
 		return x.MeasurementCount
 	}
 	return 0
+}
+
+func (x *ContainerEvent) GetPhase() ContainerPhase {
+	if x != nil {
+		return x.Phase
+	}
+	return ContainerPhase_CONTAINER_PHASE_UNMANAGED
+}
+
+func (x *ContainerEvent) GetContainerName() string {
+	if x != nil {
+		return x.ContainerName
+	}
+	return ""
 }
 
 // GetTDQuoteRequest asks trustd to obtain a TD Quote.
@@ -1154,6 +1325,459 @@ func (*HeartbeatReportResponse) Descriptor() ([]byte, []int) {
 	return file_v1_trustd_proto_rawDescGZIP(), []int{18}
 }
 
+type StartContainerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                                                                               // container name (trustweave-mcp-0, etc.)
+	Image         string                 `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`                                                                             // OCI image ref (must be pre-staged in guest)
+	Env           []string               `protobuf:"bytes,3,rep,name=env,proto3" json:"env,omitempty"`                                                                                 // KEY=VALUE pairs
+	Ports         []int32                `protobuf:"varint,4,rep,packed,name=ports,proto3" json:"ports,omitempty"`                                                                     // ports the container listens on (for ready detection)
+	NetworkHost   bool                   `protobuf:"varint,5,opt,name=network_host,json=networkHost,proto3" json:"network_host,omitempty"`                                             // --network host
+	Labels        map[string]string      `protobuf:"bytes,6,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // optional labels
+	ReadyMarker   string                 `protobuf:"bytes,7,opt,name=ready_marker,json=readyMarker,proto3" json:"ready_marker,omitempty"`                                              // substring to match on stdout for READY (default: TRUSTWEAVE_READY)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartContainerRequest) Reset() {
+	*x = StartContainerRequest{}
+	mi := &file_v1_trustd_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartContainerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartContainerRequest) ProtoMessage() {}
+
+func (x *StartContainerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_trustd_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartContainerRequest.ProtoReflect.Descriptor instead.
+func (*StartContainerRequest) Descriptor() ([]byte, []int) {
+	return file_v1_trustd_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *StartContainerRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *StartContainerRequest) GetImage() string {
+	if x != nil {
+		return x.Image
+	}
+	return ""
+}
+
+func (x *StartContainerRequest) GetEnv() []string {
+	if x != nil {
+		return x.Env
+	}
+	return nil
+}
+
+func (x *StartContainerRequest) GetPorts() []int32 {
+	if x != nil {
+		return x.Ports
+	}
+	return nil
+}
+
+func (x *StartContainerRequest) GetNetworkHost() bool {
+	if x != nil {
+		return x.NetworkHost
+	}
+	return false
+}
+
+func (x *StartContainerRequest) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *StartContainerRequest) GetReadyMarker() string {
+	if x != nil {
+		return x.ReadyMarker
+	}
+	return ""
+}
+
+type StartContainerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CgroupPath    string                 `protobuf:"bytes,1,opt,name=cgroup_path,json=cgroupPath,proto3" json:"cgroup_path,omitempty"`    // resolved cgroup after start (may be empty if pending)
+	ContainerId   string                 `protobuf:"bytes,2,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"` // Docker/containerd container ID
+	Started       bool                   `protobuf:"varint,3,opt,name=started,proto3" json:"started,omitempty"`
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	Phase         ContainerPhase         `protobuf:"varint,5,opt,name=phase,proto3,enum=trustd.v1.ContainerPhase" json:"phase,omitempty"` // current phase after start attempt
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartContainerResponse) Reset() {
+	*x = StartContainerResponse{}
+	mi := &file_v1_trustd_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartContainerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartContainerResponse) ProtoMessage() {}
+
+func (x *StartContainerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_trustd_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartContainerResponse.ProtoReflect.Descriptor instead.
+func (*StartContainerResponse) Descriptor() ([]byte, []int) {
+	return file_v1_trustd_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *StartContainerResponse) GetCgroupPath() string {
+	if x != nil {
+		return x.CgroupPath
+	}
+	return ""
+}
+
+func (x *StartContainerResponse) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
+func (x *StartContainerResponse) GetStarted() bool {
+	if x != nil {
+		return x.Started
+	}
+	return false
+}
+
+func (x *StartContainerResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *StartContainerResponse) GetPhase() ContainerPhase {
+	if x != nil {
+		return x.Phase
+	}
+	return ContainerPhase_CONTAINER_PHASE_UNMANAGED
+}
+
+type StopContainerRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                                            // stop by name
+	CgroupPath     string                 `protobuf:"bytes,2,opt,name=cgroup_path,json=cgroupPath,proto3" json:"cgroup_path,omitempty"`              // or by cgroup (for remediation path)
+	TimeoutSeconds int32                  `protobuf:"varint,3,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"` // grace period before SIGKILL (default: 10)
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *StopContainerRequest) Reset() {
+	*x = StopContainerRequest{}
+	mi := &file_v1_trustd_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StopContainerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StopContainerRequest) ProtoMessage() {}
+
+func (x *StopContainerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_trustd_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StopContainerRequest.ProtoReflect.Descriptor instead.
+func (*StopContainerRequest) Descriptor() ([]byte, []int) {
+	return file_v1_trustd_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *StopContainerRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *StopContainerRequest) GetCgroupPath() string {
+	if x != nil {
+		return x.CgroupPath
+	}
+	return ""
+}
+
+func (x *StopContainerRequest) GetTimeoutSeconds() int32 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+type StopContainerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Stopped       bool                   `protobuf:"varint,1,opt,name=stopped,proto3" json:"stopped,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StopContainerResponse) Reset() {
+	*x = StopContainerResponse{}
+	mi := &file_v1_trustd_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StopContainerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StopContainerResponse) ProtoMessage() {}
+
+func (x *StopContainerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_trustd_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StopContainerResponse.ProtoReflect.Descriptor instead.
+func (*StopContainerResponse) Descriptor() ([]byte, []int) {
+	return file_v1_trustd_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *StopContainerResponse) GetStopped() bool {
+	if x != nil {
+		return x.Stopped
+	}
+	return false
+}
+
+func (x *StopContainerResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type ListRunningRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRunningRequest) Reset() {
+	*x = ListRunningRequest{}
+	mi := &file_v1_trustd_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRunningRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRunningRequest) ProtoMessage() {}
+
+func (x *ListRunningRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_trustd_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRunningRequest.ProtoReflect.Descriptor instead.
+func (*ListRunningRequest) Descriptor() ([]byte, []int) {
+	return file_v1_trustd_proto_rawDescGZIP(), []int{23}
+}
+
+type ListRunningResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Containers    []*ManagedContainer    `protobuf:"bytes,1,rep,name=containers,proto3" json:"containers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRunningResponse) Reset() {
+	*x = ListRunningResponse{}
+	mi := &file_v1_trustd_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRunningResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRunningResponse) ProtoMessage() {}
+
+func (x *ListRunningResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_trustd_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRunningResponse.ProtoReflect.Descriptor instead.
+func (*ListRunningResponse) Descriptor() ([]byte, []int) {
+	return file_v1_trustd_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListRunningResponse) GetContainers() []*ManagedContainer {
+	if x != nil {
+		return x.Containers
+	}
+	return nil
+}
+
+// ManagedContainer is a container started via StartContainer.
+type ManagedContainer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Image         string                 `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
+	CgroupPath    string                 `protobuf:"bytes,3,opt,name=cgroup_path,json=cgroupPath,proto3" json:"cgroup_path,omitempty"`
+	ContainerId   string                 `protobuf:"bytes,4,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	Phase         ContainerPhase         `protobuf:"varint,5,opt,name=phase,proto3,enum=trustd.v1.ContainerPhase" json:"phase,omitempty"`
+	StartedAt     int64                  `protobuf:"varint,6,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"` // unix epoch seconds
+	Ports         []int32                `protobuf:"varint,7,rep,packed,name=ports,proto3" json:"ports,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ManagedContainer) Reset() {
+	*x = ManagedContainer{}
+	mi := &file_v1_trustd_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ManagedContainer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManagedContainer) ProtoMessage() {}
+
+func (x *ManagedContainer) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_trustd_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManagedContainer.ProtoReflect.Descriptor instead.
+func (*ManagedContainer) Descriptor() ([]byte, []int) {
+	return file_v1_trustd_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ManagedContainer) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ManagedContainer) GetImage() string {
+	if x != nil {
+		return x.Image
+	}
+	return ""
+}
+
+func (x *ManagedContainer) GetCgroupPath() string {
+	if x != nil {
+		return x.CgroupPath
+	}
+	return ""
+}
+
+func (x *ManagedContainer) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
+func (x *ManagedContainer) GetPhase() ContainerPhase {
+	if x != nil {
+		return x.Phase
+	}
+	return ContainerPhase_CONTAINER_PHASE_UNMANAGED
+}
+
+func (x *ManagedContainer) GetStartedAt() int64 {
+	if x != nil {
+		return x.StartedAt
+	}
+	return 0
+}
+
+func (x *ManagedContainer) GetPorts() []int32 {
+	if x != nil {
+		return x.Ports
+	}
+	return nil
+}
+
 var File_v1_trustd_proto protoreflect.FileDescriptor
 
 const file_v1_trustd_proto_rawDesc = "" +
@@ -1186,7 +1810,7 @@ const file_v1_trustd_proto_rawDesc = "" +
 	"containers\";\n" +
 	"\x18GetContainerStateRequest\x12\x1f\n" +
 	"\vcgroup_path\x18\x01 \x01(\tR\n" +
-	"cgroupPath\"\x9c\x02\n" +
+	"cgroupPath\"\x97\x03\n" +
 	"\x0eContainerState\x12\x1f\n" +
 	"\vcgroup_path\x18\x01 \x01(\tR\n" +
 	"cgroupPath\x12\x14\n" +
@@ -1195,12 +1819,16 @@ const file_v1_trustd_proto_rawDesc = "" +
 	"\x11measurement_count\x18\x04 \x01(\x03R\x10measurementCount\x12%\n" +
 	"\x0elast_heartbeat\x18\x05 \x01(\x03R\rlastHeartbeat\x12'\n" +
 	"\x0fheartbeat_count\x18\x06 \x01(\x03R\x0eheartbeatCount\x121\n" +
-	"\x14heartbeat_monitoring\x18\a \x01(\bR\x13heartbeatMonitoring\"l\n" +
+	"\x14heartbeat_monitoring\x18\a \x01(\bR\x13heartbeatMonitoring\x12/\n" +
+	"\x05phase\x18\n" +
+	" \x01(\x0e2\x19.trustd.v1.ContainerPhaseR\x05phase\x12%\n" +
+	"\x0econtainer_name\x18\v \x01(\tR\rcontainerName\x12!\n" +
+	"\fcontainer_id\x18\f \x01(\tR\vcontainerId\"l\n" +
 	"\x12WatchEventsRequest\x125\n" +
 	"\vevent_types\x18\x01 \x03(\x0e2\x14.trustd.v1.EventTypeR\n" +
 	"eventTypes\x12\x1f\n" +
 	"\vcgroup_path\x18\x02 \x01(\tR\n" +
-	"cgroupPath\"\x93\x02\n" +
+	"cgroupPath\"\xeb\x02\n" +
 	"\x0eContainerEvent\x123\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2\x14.trustd.v1.EventTypeR\teventType\x12\x1f\n" +
@@ -1211,7 +1839,10 @@ const file_v1_trustd_proto_rawDesc = "" +
 	"\bfilename\x18\x05 \x01(\tR\bfilename\x12\x16\n" +
 	"\x06detail\x18\x06 \x01(\tR\x06detail\x12\x14\n" +
 	"\x05rtmr3\x18\a \x01(\tR\x05rtmr3\x12+\n" +
-	"\x11measurement_count\x18\b \x01(\x03R\x10measurementCount\"4\n" +
+	"\x11measurement_count\x18\b \x01(\x03R\x10measurementCount\x12/\n" +
+	"\x05phase\x18\t \x01(\x0e2\x19.trustd.v1.ContainerPhaseR\x05phase\x12%\n" +
+	"\x0econtainer_name\x18\n" +
+	" \x01(\tR\rcontainerName\"4\n" +
 	"\x11GetTDQuoteRequest\x12\x1f\n" +
 	"\vreport_data\x18\x01 \x01(\fR\n" +
 	"reportData\"/\n" +
@@ -1234,7 +1865,58 @@ const file_v1_trustd_proto_rawDesc = "" +
 	"\x16HeartbeatReportRequest\x12\x1f\n" +
 	"\vcgroup_path\x18\x01 \x01(\tR\n" +
 	"cgroupPath\"\x19\n" +
-	"\x17HeartbeatReportResponse*\xe0\x01\n" +
+	"\x17HeartbeatReportResponse\"\xb0\x02\n" +
+	"\x15StartContainerRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05image\x18\x02 \x01(\tR\x05image\x12\x10\n" +
+	"\x03env\x18\x03 \x03(\tR\x03env\x12\x14\n" +
+	"\x05ports\x18\x04 \x03(\x05R\x05ports\x12!\n" +
+	"\fnetwork_host\x18\x05 \x01(\bR\vnetworkHost\x12D\n" +
+	"\x06labels\x18\x06 \x03(\v2,.trustd.v1.StartContainerRequest.LabelsEntryR\x06labels\x12!\n" +
+	"\fready_marker\x18\a \x01(\tR\vreadyMarker\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbd\x01\n" +
+	"\x16StartContainerResponse\x12\x1f\n" +
+	"\vcgroup_path\x18\x01 \x01(\tR\n" +
+	"cgroupPath\x12!\n" +
+	"\fcontainer_id\x18\x02 \x01(\tR\vcontainerId\x12\x18\n" +
+	"\astarted\x18\x03 \x01(\bR\astarted\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\x12/\n" +
+	"\x05phase\x18\x05 \x01(\x0e2\x19.trustd.v1.ContainerPhaseR\x05phase\"t\n" +
+	"\x14StopContainerRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
+	"\vcgroup_path\x18\x02 \x01(\tR\n" +
+	"cgroupPath\x12'\n" +
+	"\x0ftimeout_seconds\x18\x03 \x01(\x05R\x0etimeoutSeconds\"G\n" +
+	"\x15StopContainerResponse\x12\x18\n" +
+	"\astopped\x18\x01 \x01(\bR\astopped\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x14\n" +
+	"\x12ListRunningRequest\"R\n" +
+	"\x13ListRunningResponse\x12;\n" +
+	"\n" +
+	"containers\x18\x01 \x03(\v2\x1b.trustd.v1.ManagedContainerR\n" +
+	"containers\"\xe6\x01\n" +
+	"\x10ManagedContainer\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05image\x18\x02 \x01(\tR\x05image\x12\x1f\n" +
+	"\vcgroup_path\x18\x03 \x01(\tR\n" +
+	"cgroupPath\x12!\n" +
+	"\fcontainer_id\x18\x04 \x01(\tR\vcontainerId\x12/\n" +
+	"\x05phase\x18\x05 \x01(\x0e2\x19.trustd.v1.ContainerPhaseR\x05phase\x12\x1d\n" +
+	"\n" +
+	"started_at\x18\x06 \x01(\x03R\tstartedAt\x12\x14\n" +
+	"\x05ports\x18\a \x03(\x05R\x05ports*\x9a\x02\n" +
+	"\x0eContainerPhase\x12\x1d\n" +
+	"\x19CONTAINER_PHASE_UNMANAGED\x10\x00\x12\x1b\n" +
+	"\x17CONTAINER_PHASE_PENDING\x10\x01\x12\x1b\n" +
+	"\x17CONTAINER_PHASE_RUNNING\x10\x02\x12\x19\n" +
+	"\x15CONTAINER_PHASE_READY\x10\x03\x12\x1b\n" +
+	"\x17CONTAINER_PHASE_TRUSTED\x10\x04\x12\x1d\n" +
+	"\x19CONTAINER_PHASE_UNTRUSTED\x10\x05\x12\x1f\n" +
+	"\x1bCONTAINER_PHASE_REMEDIATING\x10\x06\x12\x1b\n" +
+	"\x17CONTAINER_PHASE_STOPPED\x10\a\x12\x1a\n" +
+	"\x16CONTAINER_PHASE_FAILED\x10\b*\x93\x02\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eEVENT_TYPE_NEW\x10\x01\x12\x1a\n" +
@@ -1243,7 +1925,13 @@ const file_v1_trustd_proto_rawDesc = "" +
 	"\x19EVENT_TYPE_HEARTBEAT_MISS\x10\x04\x12\x16\n" +
 	"\x12EVENT_TYPE_REMOVED\x10\x05\x12\x1b\n" +
 	"\x17EVENT_TYPE_ATTEST_BEGIN\x10\x06\x12\x19\n" +
-	"\x15EVENT_TYPE_ATTEST_END\x10\a2\xdf\x06\n" +
+	"\x15EVENT_TYPE_ATTEST_END\x10\a\x12\x14\n" +
+	"\x10EVENT_TYPE_READY\x10\b\x12\x1b\n" +
+	"\x17EVENT_TYPE_PHASE_CHANGE\x10\t*h\n" +
+	"\x0fRemediationMode\x12\x1b\n" +
+	"\x17REMEDIATION_MODE_SIGNAL\x10\x00\x12\x1d\n" +
+	"\x19REMEDIATION_MODE_RECREATE\x10\x01\x12\x19\n" +
+	"\x15REMEDIATION_MODE_KILL\x10\x022\xe2\b\n" +
 	"\x06Trustd\x12X\n" +
 	"\x0fAttestContainer\x12!.trustd.v1.AttestContainerRequest\x1a\".trustd.v1.AttestContainerResponse\x12U\n" +
 	"\x0eListContainers\x12 .trustd.v1.ListContainersRequest\x1a!.trustd.v1.ListContainersResponse\x12S\n" +
@@ -1255,7 +1943,10 @@ const file_v1_trustd_proto_rawDesc = "" +
 	"\x15StartHeartbeatMonitor\x12\".trustd.v1.HeartbeatMonitorRequest\x1a#.trustd.v1.HeartbeatMonitorResponse\x12g\n" +
 	"\x14StopHeartbeatMonitor\x12&.trustd.v1.HeartbeatMonitorStopRequest\x1a'.trustd.v1.HeartbeatMonitorStopResponse\x12X\n" +
 	"\x0fReportHeartbeat\x12!.trustd.v1.HeartbeatReportRequest\x1a\".trustd.v1.HeartbeatReportResponse\x12R\n" +
-	"\x10RestartContainer\x12#.trustd.v1.GetContainerStateRequest\x1a\x19.trustd.v1.ContainerStateB@Z>kubevirt.io/kubevirt/pkg/virt-handler/trustd/proto/v1;trustdv1b\x06proto3"
+	"\x10RestartContainer\x12#.trustd.v1.GetContainerStateRequest\x1a\x19.trustd.v1.ContainerState\x12U\n" +
+	"\x0eStartContainer\x12 .trustd.v1.StartContainerRequest\x1a!.trustd.v1.StartContainerResponse\x12R\n" +
+	"\rStopContainer\x12\x1f.trustd.v1.StopContainerRequest\x1a .trustd.v1.StopContainerResponse\x12V\n" +
+	"\x15ListRunningContainers\x12\x1d.trustd.v1.ListRunningRequest\x1a\x1e.trustd.v1.ListRunningResponseB@Z>kubevirt.io/kubevirt/pkg/virt-handler/trustd/proto/v1;trustdv1b\x06proto3"
 
 var (
 	file_v1_trustd_proto_rawDescOnce sync.Once
@@ -1269,60 +1960,82 @@ func file_v1_trustd_proto_rawDescGZIP() []byte {
 	return file_v1_trustd_proto_rawDescData
 }
 
-var file_v1_trustd_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_v1_trustd_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_v1_trustd_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_v1_trustd_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_v1_trustd_proto_goTypes = []any{
-	(EventType)(0),                       // 0: trustd.v1.EventType
-	(*AttestContainerRequest)(nil),       // 1: trustd.v1.AttestContainerRequest
-	(*AttestContainerResponse)(nil),      // 2: trustd.v1.AttestContainerResponse
-	(*ContainerMeasurement)(nil),         // 3: trustd.v1.ContainerMeasurement
-	(*ListContainersRequest)(nil),        // 4: trustd.v1.ListContainersRequest
-	(*ListContainersResponse)(nil),       // 5: trustd.v1.ListContainersResponse
-	(*GetContainerStateRequest)(nil),     // 6: trustd.v1.GetContainerStateRequest
-	(*ContainerState)(nil),               // 7: trustd.v1.ContainerState
-	(*WatchEventsRequest)(nil),           // 8: trustd.v1.WatchEventsRequest
-	(*ContainerEvent)(nil),               // 9: trustd.v1.ContainerEvent
-	(*GetTDQuoteRequest)(nil),            // 10: trustd.v1.GetTDQuoteRequest
-	(*GetTDQuoteResponse)(nil),           // 11: trustd.v1.GetTDQuoteResponse
-	(*PingRequest)(nil),                  // 12: trustd.v1.PingRequest
-	(*PingResponse)(nil),                 // 13: trustd.v1.PingResponse
-	(*HeartbeatMonitorRequest)(nil),      // 14: trustd.v1.HeartbeatMonitorRequest
-	(*HeartbeatMonitorResponse)(nil),     // 15: trustd.v1.HeartbeatMonitorResponse
-	(*HeartbeatMonitorStopRequest)(nil),  // 16: trustd.v1.HeartbeatMonitorStopRequest
-	(*HeartbeatMonitorStopResponse)(nil), // 17: trustd.v1.HeartbeatMonitorStopResponse
-	(*HeartbeatReportRequest)(nil),       // 18: trustd.v1.HeartbeatReportRequest
-	(*HeartbeatReportResponse)(nil),      // 19: trustd.v1.HeartbeatReportResponse
+	(ContainerPhase)(0),                  // 0: trustd.v1.ContainerPhase
+	(EventType)(0),                       // 1: trustd.v1.EventType
+	(RemediationMode)(0),                 // 2: trustd.v1.RemediationMode
+	(*AttestContainerRequest)(nil),       // 3: trustd.v1.AttestContainerRequest
+	(*AttestContainerResponse)(nil),      // 4: trustd.v1.AttestContainerResponse
+	(*ContainerMeasurement)(nil),         // 5: trustd.v1.ContainerMeasurement
+	(*ListContainersRequest)(nil),        // 6: trustd.v1.ListContainersRequest
+	(*ListContainersResponse)(nil),       // 7: trustd.v1.ListContainersResponse
+	(*GetContainerStateRequest)(nil),     // 8: trustd.v1.GetContainerStateRequest
+	(*ContainerState)(nil),               // 9: trustd.v1.ContainerState
+	(*WatchEventsRequest)(nil),           // 10: trustd.v1.WatchEventsRequest
+	(*ContainerEvent)(nil),               // 11: trustd.v1.ContainerEvent
+	(*GetTDQuoteRequest)(nil),            // 12: trustd.v1.GetTDQuoteRequest
+	(*GetTDQuoteResponse)(nil),           // 13: trustd.v1.GetTDQuoteResponse
+	(*PingRequest)(nil),                  // 14: trustd.v1.PingRequest
+	(*PingResponse)(nil),                 // 15: trustd.v1.PingResponse
+	(*HeartbeatMonitorRequest)(nil),      // 16: trustd.v1.HeartbeatMonitorRequest
+	(*HeartbeatMonitorResponse)(nil),     // 17: trustd.v1.HeartbeatMonitorResponse
+	(*HeartbeatMonitorStopRequest)(nil),  // 18: trustd.v1.HeartbeatMonitorStopRequest
+	(*HeartbeatMonitorStopResponse)(nil), // 19: trustd.v1.HeartbeatMonitorStopResponse
+	(*HeartbeatReportRequest)(nil),       // 20: trustd.v1.HeartbeatReportRequest
+	(*HeartbeatReportResponse)(nil),      // 21: trustd.v1.HeartbeatReportResponse
+	(*StartContainerRequest)(nil),        // 22: trustd.v1.StartContainerRequest
+	(*StartContainerResponse)(nil),       // 23: trustd.v1.StartContainerResponse
+	(*StopContainerRequest)(nil),         // 24: trustd.v1.StopContainerRequest
+	(*StopContainerResponse)(nil),        // 25: trustd.v1.StopContainerResponse
+	(*ListRunningRequest)(nil),           // 26: trustd.v1.ListRunningRequest
+	(*ListRunningResponse)(nil),          // 27: trustd.v1.ListRunningResponse
+	(*ManagedContainer)(nil),             // 28: trustd.v1.ManagedContainer
+	nil,                                  // 29: trustd.v1.StartContainerRequest.LabelsEntry
 }
 var file_v1_trustd_proto_depIdxs = []int32{
-	3,  // 0: trustd.v1.AttestContainerResponse.measurements:type_name -> trustd.v1.ContainerMeasurement
-	7,  // 1: trustd.v1.ListContainersResponse.containers:type_name -> trustd.v1.ContainerState
-	0,  // 2: trustd.v1.WatchEventsRequest.event_types:type_name -> trustd.v1.EventType
-	0,  // 3: trustd.v1.ContainerEvent.event_type:type_name -> trustd.v1.EventType
-	1,  // 4: trustd.v1.Trustd.AttestContainer:input_type -> trustd.v1.AttestContainerRequest
-	4,  // 5: trustd.v1.Trustd.ListContainers:input_type -> trustd.v1.ListContainersRequest
-	6,  // 6: trustd.v1.Trustd.GetContainerState:input_type -> trustd.v1.GetContainerStateRequest
-	8,  // 7: trustd.v1.Trustd.WatchContainerEvents:input_type -> trustd.v1.WatchEventsRequest
-	10, // 8: trustd.v1.Trustd.GetTDQuote:input_type -> trustd.v1.GetTDQuoteRequest
-	12, // 9: trustd.v1.Trustd.Ping:input_type -> trustd.v1.PingRequest
-	14, // 10: trustd.v1.Trustd.StartHeartbeatMonitor:input_type -> trustd.v1.HeartbeatMonitorRequest
-	16, // 11: trustd.v1.Trustd.StopHeartbeatMonitor:input_type -> trustd.v1.HeartbeatMonitorStopRequest
-	18, // 12: trustd.v1.Trustd.ReportHeartbeat:input_type -> trustd.v1.HeartbeatReportRequest
-	6,  // 13: trustd.v1.Trustd.RestartContainer:input_type -> trustd.v1.GetContainerStateRequest
-	2,  // 14: trustd.v1.Trustd.AttestContainer:output_type -> trustd.v1.AttestContainerResponse
-	5,  // 15: trustd.v1.Trustd.ListContainers:output_type -> trustd.v1.ListContainersResponse
-	7,  // 16: trustd.v1.Trustd.GetContainerState:output_type -> trustd.v1.ContainerState
-	9,  // 17: trustd.v1.Trustd.WatchContainerEvents:output_type -> trustd.v1.ContainerEvent
-	11, // 18: trustd.v1.Trustd.GetTDQuote:output_type -> trustd.v1.GetTDQuoteResponse
-	13, // 19: trustd.v1.Trustd.Ping:output_type -> trustd.v1.PingResponse
-	15, // 20: trustd.v1.Trustd.StartHeartbeatMonitor:output_type -> trustd.v1.HeartbeatMonitorResponse
-	17, // 21: trustd.v1.Trustd.StopHeartbeatMonitor:output_type -> trustd.v1.HeartbeatMonitorStopResponse
-	19, // 22: trustd.v1.Trustd.ReportHeartbeat:output_type -> trustd.v1.HeartbeatReportResponse
-	7,  // 23: trustd.v1.Trustd.RestartContainer:output_type -> trustd.v1.ContainerState
-	14, // [14:24] is the sub-list for method output_type
-	4,  // [4:14] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	5,  // 0: trustd.v1.AttestContainerResponse.measurements:type_name -> trustd.v1.ContainerMeasurement
+	9,  // 1: trustd.v1.ListContainersResponse.containers:type_name -> trustd.v1.ContainerState
+	0,  // 2: trustd.v1.ContainerState.phase:type_name -> trustd.v1.ContainerPhase
+	1,  // 3: trustd.v1.WatchEventsRequest.event_types:type_name -> trustd.v1.EventType
+	1,  // 4: trustd.v1.ContainerEvent.event_type:type_name -> trustd.v1.EventType
+	0,  // 5: trustd.v1.ContainerEvent.phase:type_name -> trustd.v1.ContainerPhase
+	29, // 6: trustd.v1.StartContainerRequest.labels:type_name -> trustd.v1.StartContainerRequest.LabelsEntry
+	0,  // 7: trustd.v1.StartContainerResponse.phase:type_name -> trustd.v1.ContainerPhase
+	28, // 8: trustd.v1.ListRunningResponse.containers:type_name -> trustd.v1.ManagedContainer
+	0,  // 9: trustd.v1.ManagedContainer.phase:type_name -> trustd.v1.ContainerPhase
+	3,  // 10: trustd.v1.Trustd.AttestContainer:input_type -> trustd.v1.AttestContainerRequest
+	6,  // 11: trustd.v1.Trustd.ListContainers:input_type -> trustd.v1.ListContainersRequest
+	8,  // 12: trustd.v1.Trustd.GetContainerState:input_type -> trustd.v1.GetContainerStateRequest
+	10, // 13: trustd.v1.Trustd.WatchContainerEvents:input_type -> trustd.v1.WatchEventsRequest
+	12, // 14: trustd.v1.Trustd.GetTDQuote:input_type -> trustd.v1.GetTDQuoteRequest
+	14, // 15: trustd.v1.Trustd.Ping:input_type -> trustd.v1.PingRequest
+	16, // 16: trustd.v1.Trustd.StartHeartbeatMonitor:input_type -> trustd.v1.HeartbeatMonitorRequest
+	18, // 17: trustd.v1.Trustd.StopHeartbeatMonitor:input_type -> trustd.v1.HeartbeatMonitorStopRequest
+	20, // 18: trustd.v1.Trustd.ReportHeartbeat:input_type -> trustd.v1.HeartbeatReportRequest
+	8,  // 19: trustd.v1.Trustd.RestartContainer:input_type -> trustd.v1.GetContainerStateRequest
+	22, // 20: trustd.v1.Trustd.StartContainer:input_type -> trustd.v1.StartContainerRequest
+	24, // 21: trustd.v1.Trustd.StopContainer:input_type -> trustd.v1.StopContainerRequest
+	26, // 22: trustd.v1.Trustd.ListRunningContainers:input_type -> trustd.v1.ListRunningRequest
+	4,  // 23: trustd.v1.Trustd.AttestContainer:output_type -> trustd.v1.AttestContainerResponse
+	7,  // 24: trustd.v1.Trustd.ListContainers:output_type -> trustd.v1.ListContainersResponse
+	9,  // 25: trustd.v1.Trustd.GetContainerState:output_type -> trustd.v1.ContainerState
+	11, // 26: trustd.v1.Trustd.WatchContainerEvents:output_type -> trustd.v1.ContainerEvent
+	13, // 27: trustd.v1.Trustd.GetTDQuote:output_type -> trustd.v1.GetTDQuoteResponse
+	15, // 28: trustd.v1.Trustd.Ping:output_type -> trustd.v1.PingResponse
+	17, // 29: trustd.v1.Trustd.StartHeartbeatMonitor:output_type -> trustd.v1.HeartbeatMonitorResponse
+	19, // 30: trustd.v1.Trustd.StopHeartbeatMonitor:output_type -> trustd.v1.HeartbeatMonitorStopResponse
+	21, // 31: trustd.v1.Trustd.ReportHeartbeat:output_type -> trustd.v1.HeartbeatReportResponse
+	9,  // 32: trustd.v1.Trustd.RestartContainer:output_type -> trustd.v1.ContainerState
+	23, // 33: trustd.v1.Trustd.StartContainer:output_type -> trustd.v1.StartContainerResponse
+	25, // 34: trustd.v1.Trustd.StopContainer:output_type -> trustd.v1.StopContainerResponse
+	27, // 35: trustd.v1.Trustd.ListRunningContainers:output_type -> trustd.v1.ListRunningResponse
+	23, // [23:36] is the sub-list for method output_type
+	10, // [10:23] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_v1_trustd_proto_init() }
@@ -1335,8 +2048,8 @@ func file_v1_trustd_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_trustd_proto_rawDesc), len(file_v1_trustd_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   19,
+			NumEnums:      3,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

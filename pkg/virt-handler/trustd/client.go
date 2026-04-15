@@ -61,6 +61,11 @@ const (
 	methodStartHeartbeat    = "/trustd.v1.Trustd/StartHeartbeatMonitor"
 	methodStopHeartbeat     = "/trustd.v1.Trustd/StopHeartbeatMonitor"
 	methodReportHeartbeat   = "/trustd.v1.Trustd/ReportHeartbeat"
+
+	// Container lifecycle methods (kata-agent-like).
+	methodStartContainer        = "/trustd.v1.Trustd/StartContainer"
+	methodStopContainer         = "/trustd.v1.Trustd/StopContainer"
+	methodListRunningContainers = "/trustd.v1.Trustd/ListRunningContainers"
 )
 
 // Client communicates with trustd inside a TDX CVM via gRPC-over-vsock.
@@ -128,6 +133,8 @@ const (
 	EventTypeRemoved       ContainerEventType = ContainerEventType(trustdv1.EventType_EVENT_TYPE_REMOVED)
 	EventTypeAttestBegin   ContainerEventType = ContainerEventType(trustdv1.EventType_EVENT_TYPE_ATTEST_BEGIN)
 	EventTypeAttestEnd     ContainerEventType = ContainerEventType(trustdv1.EventType_EVENT_TYPE_ATTEST_END)
+	EventTypeReady         ContainerEventType = ContainerEventType(trustdv1.EventType_EVENT_TYPE_READY)
+	EventTypePhaseChange   ContainerEventType = ContainerEventType(trustdv1.EventType_EVENT_TYPE_PHASE_CHANGE)
 )
 
 // ContainerEvent is emitted by trustd watch stream.
@@ -140,6 +147,9 @@ type ContainerEvent struct {
 	Detail           string
 	RTMR3            string
 	MeasurementCount int64
+	// Lifecycle fields (populated for Ready / PhaseChange events).
+	Phase         int32
+	ContainerName string
 }
 
 // PingResponse is the trustd liveness response.
@@ -493,6 +503,8 @@ func (c *Client) WatchContainerEvents(ctx context.Context, handler func(Containe
 			Detail:           msg.GetDetail(),
 			RTMR3:            msg.GetRtmr3(),
 			MeasurementCount: msg.GetMeasurementCount(),
+			Phase:            int32(msg.GetPhase()),
+			ContainerName:    msg.GetContainerName(),
 		}
 
 		if err := handler(event); err != nil {
@@ -511,4 +523,68 @@ func (c *Client) IsReachable() bool {
 		return false
 	}
 	return true
+}
+
+// ---- Container lifecycle methods (kata-agent-like) ----
+
+// StartContainer instructs trustd to create and start a container from a
+// pre-staged image. trustd stores the spec so remediation can recreate it.
+func (c *Client) StartContainer(ctx context.Context, req *StartContainerRequest) (*StartContainerResponse, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, DefaultRequestTimeout)
+	defer cancel()
+
+	conn, err := c.dialContext(reqCtx)
+	if err != nil {
+		return nil, fmt.Errorf("dial trustd %d:%d: %w", c.cid, c.port, err)
+	}
+	defer conn.Close()
+
+	protoReq := &trustdv1.StartContainerRequest{
+		Name:        req.Name,
+		Image:       req.Image,
+		Env:         req.Env,
+		Ports:       req.Ports,
+		NetworkHost: req.NetworkHost,
+		Labels:      req.Labels,
+		ReadyMarker: req.ReadyMarker,
+	}
+	protoResp := &trustdv1.StartContainerResponse{}
+	if err := conn.Invoke(reqCtx, methodStartContainer, protoReq, protoResp); err != nil {
+		return nil, fmt.Errorf("StartContainer %s: %w", req.Name, err)
+	}
+
+	return &StartContainerResponse{
+		CgroupPath:  protoResp.GetCgroupPath(),
+		ContainerID: protoResp.GetContainerId(),
+		Started:     protoResp.GetStarted(),
+		Error:       protoResp.GetError(),
+		Phase:       int32(protoResp.GetPhase()),
+	}, nil
+}
+
+// StopContainer instructs trustd to stop and remove a container.
+func (c *Client) StopContainer(ctx context.Context, req *StopContainerRequest) (*StopContainerResponse, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, DefaultRequestTimeout)
+	defer cancel()
+
+	conn, err := c.dialContext(reqCtx)
+	if err != nil {
+		return nil, fmt.Errorf("dial trustd %d:%d: %w", c.cid, c.port, err)
+	}
+	defer conn.Close()
+
+	protoReq := &trustdv1.StopContainerRequest{
+		Name:           req.Name,
+		CgroupPath:     req.CgroupPath,
+		TimeoutSeconds: req.TimeoutSeconds,
+	}
+	protoResp := &trustdv1.StopContainerResponse{}
+	if err := conn.Invoke(reqCtx, methodStopContainer, protoReq, protoResp); err != nil {
+		return nil, fmt.Errorf("StopContainer %s: %w", req.Name, err)
+	}
+
+	return &StopContainerResponse{
+		Stopped: protoResp.GetStopped(),
+		Error:   protoResp.GetError(),
+	}, nil
 }

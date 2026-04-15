@@ -93,6 +93,14 @@ func (f *fakeCollectorClient) ReportHeartbeat(_ context.Context, cgroupPath stri
 	return f.reportHBErr
 }
 
+func (f *fakeCollectorClient) StartContainer(_ context.Context, _ *StartContainerRequest) (*StartContainerResponse, error) {
+	return &StartContainerResponse{Started: true}, nil
+}
+
+func (f *fakeCollectorClient) StopContainer(_ context.Context, _ *StopContainerRequest) (*StopContainerResponse, error) {
+	return &StopContainerResponse{Stopped: true}, nil
+}
+
 type fakeVerifier struct {
 	result VerificationResult
 	err    error

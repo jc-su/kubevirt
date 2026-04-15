@@ -2291,6 +2291,23 @@ const (
 	ContainerTrustVerdictStale ContainerTrustVerdict = "Stale"
 )
 
+// ContainerTrustPhase tracks the lifecycle state of a container managed by
+// trustd inside a TDX CVM. Mirrors the proto ContainerPhase enum.
+// +kubebuilder:validation:Enum=Unmanaged;Pending;Running;Ready;Trusted;Untrusted;Remediating;Stopped;Failed
+type ContainerTrustPhase string
+
+const (
+	ContainerTrustPhaseUnmanaged   ContainerTrustPhase = "Unmanaged"
+	ContainerTrustPhasePending     ContainerTrustPhase = "Pending"
+	ContainerTrustPhaseRunning     ContainerTrustPhase = "Running"
+	ContainerTrustPhaseReady       ContainerTrustPhase = "Ready"
+	ContainerTrustPhaseTrusted     ContainerTrustPhase = "Trusted"
+	ContainerTrustPhaseUntrusted   ContainerTrustPhase = "Untrusted"
+	ContainerTrustPhaseRemediating ContainerTrustPhase = "Remediating"
+	ContainerTrustPhaseStopped     ContainerTrustPhase = "Stopped"
+	ContainerTrustPhaseFailed      ContainerTrustPhase = "Failed"
+)
+
 // ContainerTrustState reports the trust verification state of a single container inside a TDX CVM.
 type ContainerTrustState struct {
 	// ContainerID is the cgroup-derived identifier of the container inside the CVM.
@@ -2316,6 +2333,16 @@ type ContainerTrustState struct {
 	// AttestationToken is the JWT token from the attestation service encoding the verification result.
 	// +optional
 	AttestationToken string `json:"attestationToken,omitempty"`
+	// Phase tracks the lifecycle state of this container (Pending, Running, Ready, Trusted, etc.).
+	// Populated only for containers started via trustd's StartContainer RPC.
+	// +optional
+	Phase ContainerTrustPhase `json:"phase,omitempty"`
+	// ContainerName is the human-readable name assigned at StartContainer time.
+	// +optional
+	ContainerName string `json:"containerName,omitempty"`
+	// ReadyAt is the wall time when the container's [TRUSTWEAVE_READY] marker was detected.
+	// +optional
+	ReadyAt *metav1.Time `json:"readyAt,omitempty"`
 }
 
 // ContainerMeasurement represents a single IMA file measurement inside a container.
