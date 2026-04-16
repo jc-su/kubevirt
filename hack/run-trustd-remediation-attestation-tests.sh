@@ -11,17 +11,17 @@ cd "${ROOT_DIR}"
 
 echo "[tests] trustd collector: untrusted verdict triggers remediation"
 go test ./pkg/virt-handler/trustd \
-  -run '^TestCollectorRequestsRestartForUntrustedVerdict$' \
-  -v
+    -run '^TestCollectorRequestsRestartForUntrustedVerdict$' \
+    -v
 
 echo "[tests] trustd collector: stale heartbeat miss path"
 go test ./pkg/virt-handler/trustd \
-  -run '^TestCollectorAppliesStalePolicyOnHeartbeatMiss$' \
-  -v
+    -run '^TestCollectorAppliesStalePolicyOnHeartbeatMiss$' \
+    -v
 
 echo "[tests] trustd collector: fail-closed after remediation when re-attest fails"
 go test ./pkg/virt-handler/trustd \
-  -run '^TestCollectorRemediationLifecycleKeepsFailClosedWhenReattestationFails$' \
-  -v
+    -run '^TestCollectorRemediationLifecycleKeepsFailClosedWhenReattestationFails$' \
+    -v
 
 echo "[tests] done"

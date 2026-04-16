@@ -40,6 +40,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	v1 "kubevirt.io/api/core/v1"
+
 	attestationv1 "kubevirt.io/kubevirt/pkg/virt-handler/trustd/attestationproto/v1"
 )
 

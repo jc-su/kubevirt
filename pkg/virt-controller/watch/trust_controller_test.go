@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	v1 "kubevirt.io/api/core/v1"
+
 	"kubevirt.io/kubevirt/pkg/testutils"
 
 	"kubevirt.io/kubevirt/pkg/virt-config/featuregate"

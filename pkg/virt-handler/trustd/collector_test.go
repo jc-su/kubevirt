@@ -102,8 +102,8 @@ func (f *fakeCollectorClient) StopContainer(_ context.Context, _ *StopContainerR
 }
 
 type fakeVerifier struct {
-	result VerificationResult
-	err    error
+	result  VerificationResult
+	err     error
 	updates []fakeVerifierUpdate
 }
 

@@ -51,6 +51,28 @@ type cvmTrustManager struct {
 	deliveredSpecs map[string]map[string]bool
 }
 
+// cvmTrustdNeeded decides whether virt-handler should maintain a trustd
+// vsock collector + container-lifecycle loop for this VMI. Two independent
+// reasons can require it:
+//   1. TDX attestation is requested → need the collector for RTMR events.
+//   2. The VMI carries a trustd.ContainerSpecAnnotation → trustd is the
+//      *delivery channel* for container specs, even on non-TDX VMIs
+//      (used for cold-start benchmarking where attestation is off-path).
+//
+// Gating only on attestation would break the second case, so we OR the two
+// signals. The collector itself is cheap when there are no RTMR events to
+// collect — it's just an idle vsock connection.
+func cvmTrustdNeeded(vmi *v1.VirtualMachineInstance) bool {
+	if util.IsTDXAttestationRequested(vmi) {
+		return true
+	}
+	if vmi == nil || vmi.Annotations == nil {
+		return false
+	}
+	_, has := vmi.Annotations[trustd.ContainerSpecAnnotation]
+	return has
+}
+
 func newCVMTrustManager() *cvmTrustManager {
 	return &cvmTrustManager{
 		collectors:        make(map[string]*trustd.TrustStateCollector),
@@ -64,7 +86,7 @@ func newCVMTrustManager() *cvmTrustManager {
 // ensureCollector creates and starts a collector for a VMI if needed.
 // Returns true if trustd is connected.
 func (m *cvmTrustManager) ensureCollector(vmi *v1.VirtualMachineInstance, verifier trustd.AttestationVerifier) bool {
-	if !util.IsTDXAttestationRequested(vmi) {
+	if !cvmTrustdNeeded(vmi) {
 		return false
 	}
 	if !vmi.IsRunning() || vmi.IsFinal() || vmi.IsMarkedForDeletion() {
@@ -89,10 +111,25 @@ func (m *cvmTrustManager) ensureCollector(vmi *v1.VirtualMachineInstance, verifi
 		m.stopCollector(vmi)
 	}
 
-	// Create client and check reachability
+	// Create client and check reachability. trustd usually comes up within
+	// a few seconds of VMI Running, but kubelet resync is coarse and a
+	// single failed reachability check would leave the VMI waiting minutes
+	// for the next reconcile. Retry for up to ~30s so cold-start isn't
+	// gated by the reconcile period.
 	client := trustd.NewClient(*vmi.Status.VSOCKCID)
 	if !client.IsReachable() {
-		return false
+		reachable := false
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			time.Sleep(500 * time.Millisecond)
+			if client.IsReachable() {
+				reachable = true
+				break
+			}
+		}
+		if !reachable {
+			return false
+		}
 	}
 
 	// Get attestation/heartbeat intervals from spec.
@@ -227,7 +264,7 @@ func (m *cvmTrustManager) stopAll() {
 // updateCVMTrustConditions updates the CVMAgentConnected and ContainersTrusted
 // conditions on a VMI based on the current collector state.
 func updateCVMTrustConditions(vmi *v1.VirtualMachineInstance, trustMgr *cvmTrustManager, condManager *controller.VirtualMachineInstanceConditionManager) {
-	if !util.IsTDXAttestationRequested(vmi) || !vmi.IsRunning() || vmi.IsFinal() || vmi.IsMarkedForDeletion() {
+	if !cvmTrustdNeeded(vmi) || !vmi.IsRunning() || vmi.IsFinal() || vmi.IsMarkedForDeletion() {
 		trustMgr.stopCollector(vmi)
 		vmi.Status.ContainerTrustStates = nil
 		condManager.RemoveCondition(vmi, v1.VirtualMachineInstanceCVMAgentConnected)
