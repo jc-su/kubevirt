@@ -21,11 +21,8 @@ package rest
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/emicklei/go-restful/v3"
@@ -79,83 +76,6 @@ func (lh *LifecycleHandler) TDXContainerListHandler(request *restful.Request, re
 			MeasurementCount: c.MeasurementCount,
 		}
 		result.Containers = append(result.Containers, state)
-	}
-
-	response.WriteAsJson(result)
-}
-
-// TDXContainerAttestHandler triggers attestation of a specific container inside a TDX CVM.
-func (lh *LifecycleHandler) TDXContainerAttestHandler(request *restful.Request, response *restful.Response) {
-	vmi, code, err := getVMI(request, lh.vmiStore)
-	if err != nil {
-		log.Log.Reason(err).Error(failedRetrieveVMI)
-		response.WriteError(code, err)
-		return
-	}
-
-	if !kutil.IsTDXAttestationRequested(vmi) {
-		response.WriteError(http.StatusBadRequest, fmt.Errorf("TDX container attestation not enabled for this VMI"))
-		return
-	}
-
-	if request.Request.Body == nil {
-		response.WriteError(http.StatusBadRequest, fmt.Errorf("request body required: specify containerID to attest"))
-		return
-	}
-
-	body, err := io.ReadAll(request.Request.Body)
-	if err != nil {
-		response.WriteError(http.StatusBadRequest, fmt.Errorf("failed to read request body: %w", err))
-		return
-	}
-
-	var opts v1.TDXAttestContainerOptions
-	if err := json.Unmarshal(body, &opts); err != nil {
-		response.WriteError(http.StatusBadRequest, fmt.Errorf("failed to parse attestation options: %w", err))
-		return
-	}
-	opts.ContainerID = strings.TrimSpace(opts.ContainerID)
-	if opts.ContainerID == "" {
-		response.WriteError(http.StatusBadRequest, fmt.Errorf("containerID is required"))
-		return
-	}
-
-	client, err := getTrustdClient(vmi)
-	if err != nil {
-		log.Log.Object(vmi).Reason(err).Error("Failed to create trustd client")
-		response.WriteError(http.StatusServiceUnavailable, err)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	evidence, err := client.AttestContainer(ctx, &trustd.AttestContainerRequest{
-		CgroupPath:     opts.ContainerID,
-		IncludeTDQuote: true,
-	})
-	if err != nil {
-		log.Log.Object(vmi).Reason(err).Errorf("Failed to attest container %s", opts.ContainerID)
-		response.WriteError(http.StatusInternalServerError, err)
-		return
-	}
-
-	// Convert measurements
-	measurements := make([]v1.ContainerMeasurement, 0, len(evidence.Measurements))
-	for _, m := range evidence.Measurements {
-		measurements = append(measurements, v1.ContainerMeasurement{
-			Digest: m.Digest,
-			File:   m.File,
-		})
-	}
-
-	result := v1.TDXContainerAttestationInfo{
-		ContainerID:  evidence.CgroupPath,
-		RTMR3:        evidence.RTMR3,
-		InitialRTMR3: evidence.InitialRTMR3,
-		Measurements: measurements,
-		Nonce:        evidence.Nonce,
-		TDQuote:      evidence.TDQuote,
 	}
 
 	response.WriteAsJson(result)

@@ -3962,37 +3962,6 @@ type SEVSecretOptions struct {
 	Secret string `json:"secret,omitempty"`
 }
 
-// TDXContainerAttestationInfo contains the result of attesting a container inside a TDX CVM.
-//
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-type TDXContainerAttestationInfo struct {
-	metav1.TypeMeta `json:",inline"`
-	// ContainerID is the cgroup-derived identifier.
-	ContainerID string `json:"containerID"`
-	// RTMR3 is the current per-container virtual RTMR3 value (hex-encoded SHA-384).
-	RTMR3 string `json:"rtmr3,omitempty"`
-	// InitialRTMR3 is the RTMR3 value at container creation.
-	InitialRTMR3 string `json:"initialRtmr3,omitempty"`
-	// Measurements is the ordered list of IMA file measurements.
-	Measurements []ContainerMeasurement `json:"measurements,omitempty"`
-	// TDQuote is the base64-encoded TDX Quote binding the RTMR3 to hardware attestation.
-	TDQuote string `json:"tdQuote,omitempty"`
-	// Nonce is the hex-encoded nonce used in this attestation.
-	Nonce string `json:"nonce,omitempty"`
-	// Verdict is the trust assessment from the attestation service.
-	Verdict ContainerTrustVerdict `json:"verdict,omitempty"`
-	// VerdictMessage provides human-readable details about the verdict.
-	VerdictMessage string `json:"verdictMessage,omitempty"`
-	// AttestationToken is the JWT from the attestation service.
-	AttestationToken string `json:"attestationToken,omitempty"`
-}
-
-// TDXAttestContainerOptions specifies which container to attest inside a TDX CVM.
-type TDXAttestContainerOptions struct {
-	// ContainerID is the cgroup-derived identifier of the container to attest.
-	ContainerID string `json:"containerID"`
-}
-
 // TDXContainerListInfo lists all containers and their trust states inside a TDX CVM.
 //
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

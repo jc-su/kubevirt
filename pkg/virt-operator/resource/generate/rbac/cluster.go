@@ -97,7 +97,6 @@ const (
 	apiVMInstancesSEVSetupSession           = "virtualmachineinstances/sev/setupsession"
 	apiVMInstancesSEVInjectLaunchSecret     = "virtualmachineinstances/sev/injectlaunchsecret"
 	apiVMInstancesTDXContainers             = "virtualmachineinstances/tdx/containers"
-	apiVMInstancesTDXContainerAttest        = "virtualmachineinstances/tdx/container/attest"
 	apiVMInstancesTDXTrustStates            = "virtualmachineinstances/tdx/truststates"
 	apiVMInstancesUSBRedir                  = "virtualmachineinstances/usbredir"
 	apiVMInstancesObjectGraph               = "virtualmachineinstances/objectgraph"
@@ -244,7 +243,6 @@ func newAdminClusterRole() *rbacv1.ClusterRole {
 					apiVMInstancesReset,
 					apiVMInstancesSEVSetupSession,
 					apiVMInstancesSEVInjectLaunchSecret,
-					apiVMInstancesTDXContainerAttest,
 					apiVMInstancesEvacuateCancel,
 				},
 				Verbs: []string{
@@ -456,7 +454,6 @@ func newEditClusterRole() *rbacv1.ClusterRole {
 					apiVMInstancesReset,
 					apiVMInstancesSEVSetupSession,
 					apiVMInstancesSEVInjectLaunchSecret,
-					apiVMInstancesTDXContainerAttest,
 					apiVMInstancesEvacuateCancel,
 				},
 				Verbs: []string{

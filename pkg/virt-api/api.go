@@ -620,16 +620,6 @@ func (app *virtAPIApp) composeSubresources() {
 			Writes(v1.TDXContainerListInfo{}).
 			Returns(http.StatusOK, "OK", v1.TDXContainerListInfo{}))
 
-		subws.Route(subws.PUT(definitions.NamespacedResourcePath(subresourcesvmiGVR)+definitions.SubResourcePath("tdx/container/attest")).
-			To(subresourceApp.TDXContainerAttestHandler).
-			Consumes(mime.MIME_ANY).
-			Reads(v1.TDXAttestContainerOptions{}).
-			Param(definitions.NamespaceParam(subws)).Param(definitions.NameParam(subws)).
-			Operation(version.Version+"TDXContainerAttest").
-			Doc("Trigger attestation of a specific container inside a TDX CVM").
-			Returns(http.StatusOK, "OK", v1.TDXContainerAttestationInfo{}).
-			Returns(http.StatusBadRequest, httpStatusBadRequestMessage, ""))
-
 		subws.Route(subws.GET(definitions.NamespacedResourcePath(subresourcesvmiGVR)+definitions.SubResourcePath("tdx/truststates")).
 			To(subresourceApp.TDXTrustStatesHandler).
 			Param(definitions.NamespaceParam(subws)).Param(definitions.NameParam(subws)).

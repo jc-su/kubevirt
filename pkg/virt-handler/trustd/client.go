@@ -22,7 +22,6 @@ package trustd
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -51,7 +50,6 @@ const (
 )
 
 const (
-	methodAttestContainer   = "/trustd.v1.Trustd/AttestContainer"
 	methodListContainers    = "/trustd.v1.Trustd/ListContainers"
 	methodWatchEvents       = "/trustd.v1.Trustd/WatchContainerEvents"
 	methodGetTDQuote        = "/trustd.v1.Trustd/GetTDQuote"
@@ -82,32 +80,6 @@ func NewClient(cid uint32) *Client {
 // NewClientWithPort creates a client with a custom port.
 func NewClientWithPort(cid, port uint32) *Client {
 	return &Client{cid: cid, port: port}
-}
-
-// AttestContainerRequest is the request for container attestation.
-type AttestContainerRequest struct {
-	CgroupPath     string
-	NonceHex       string
-	IncludeTDQuote bool
-}
-
-// AttestContainerResponse is the attestation evidence for one container.
-type AttestContainerResponse struct {
-	CgroupPath       string
-	RTMR3            string
-	InitialRTMR3     string
-	MeasurementCount int64
-	Measurements     []ContainerMeasurement
-	ReportData       string
-	Nonce            string
-	TDQuote          string // base64
-	Timestamp        int64
-}
-
-// ContainerMeasurement is a single IMA file measurement.
-type ContainerMeasurement struct {
-	Digest string
-	File   string
 }
 
 // ContainerState is the current state of a tracked container.
@@ -376,67 +348,6 @@ func (c *Client) ReportHeartbeat(ctx context.Context, cgroupPath string) error {
 		return fmt.Errorf("report heartbeat: %w", err)
 	}
 	return nil
-}
-
-// AttestContainer performs attestation of a specific container.
-func (c *Client) AttestContainer(ctx context.Context, req *AttestContainerRequest) (*AttestContainerResponse, error) {
-	if req == nil {
-		return nil, fmt.Errorf("attest request is nil")
-	}
-	if req.CgroupPath == "" {
-		return nil, fmt.Errorf("cgroup path is required")
-	}
-	if req.NonceHex == "" {
-		nonceHex, err := newNonceHex()
-		if err != nil {
-			return nil, fmt.Errorf("generate nonce: %w", err)
-		}
-		req.NonceHex = nonceHex
-	}
-
-	reqCtx, cancel := requestContext(ctx)
-	defer cancel()
-
-	conn, err := c.dialContext(reqCtx)
-	if err != nil {
-		return nil, fmt.Errorf("dial trustd %d:%d: %w", c.cid, c.port, err)
-	}
-	defer conn.Close()
-
-	msg := &trustdv1.AttestContainerRequest{
-		CgroupPath:     req.CgroupPath,
-		NonceHex:       req.NonceHex,
-		IncludeTdQuote: req.IncludeTDQuote,
-	}
-	resp := &trustdv1.AttestContainerResponse{}
-	if err := conn.Invoke(reqCtx, methodAttestContainer, msg, resp); err != nil {
-		return nil, fmt.Errorf("attest container: %w", err)
-	}
-
-	measurements := make([]ContainerMeasurement, 0, len(resp.GetMeasurements()))
-	for _, measurement := range resp.GetMeasurements() {
-		measurements = append(measurements, ContainerMeasurement{
-			Digest: measurement.GetDigest(),
-			File:   measurement.GetFile(),
-		})
-	}
-
-	encodedQuote := ""
-	if quote := resp.GetTdQuote(); len(quote) > 0 {
-		encodedQuote = base64.StdEncoding.EncodeToString(quote)
-	}
-
-	return &AttestContainerResponse{
-		CgroupPath:       resp.GetCgroupPath(),
-		RTMR3:            resp.GetRtmr3(),
-		InitialRTMR3:     resp.GetInitialRtmr3(),
-		MeasurementCount: resp.GetMeasurementCount(),
-		Measurements:     measurements,
-		ReportData:       resp.GetReportData(),
-		Nonce:            resp.GetNonce(),
-		TDQuote:          encodedQuote,
-		Timestamp:        resp.GetTimestamp(),
-	}, nil
 }
 
 // GetTDQuote requests a TDX TD Quote for the given report data.

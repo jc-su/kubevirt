@@ -10,17 +10,16 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: v1/attestation.proto
+// source: attestationproto/v1/attestation.proto
 
 package attestationv1
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -70,11 +69,11 @@ func (x Verdict) String() string {
 }
 
 func (Verdict) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_attestation_proto_enumTypes[0].Descriptor()
+	return file_attestationproto_v1_attestation_proto_enumTypes[0].Descriptor()
 }
 
 func (Verdict) Type() protoreflect.EnumType {
-	return &file_v1_attestation_proto_enumTypes[0]
+	return &file_attestationproto_v1_attestation_proto_enumTypes[0]
 }
 
 func (x Verdict) Number() protoreflect.EnumNumber {
@@ -83,50 +82,45 @@ func (x Verdict) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Verdict.Descriptor instead.
 func (Verdict) EnumDescriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{0}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{0}
 }
 
-// VerifyRequest contains the attestation evidence to verify.
-type VerifyRequest struct {
+// VerifyWorkloadRequest carries per-workload evidence produced by trustd.
+type VerifyWorkloadRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Container identifier (cgroup path).
-	CgroupPath string `protobuf:"bytes,1,opt,name=cgroup_path,json=cgroupPath,proto3" json:"cgroup_path,omitempty"`
-	// VMI name and namespace for correlation.
-	VmiName      string `protobuf:"bytes,2,opt,name=vmi_name,json=vmiName,proto3" json:"vmi_name,omitempty"`
-	VmiNamespace string `protobuf:"bytes,3,opt,name=vmi_namespace,json=vmiNamespace,proto3" json:"vmi_namespace,omitempty"`
-	// Current RTMR3 value (hex-encoded SHA-384).
-	Rtmr3 string `protobuf:"bytes,4,opt,name=rtmr3,proto3" json:"rtmr3,omitempty"`
-	// Initial RTMR3 value (hex-encoded SHA-384).
-	InitialRtmr3 string `protobuf:"bytes,5,opt,name=initial_rtmr3,json=initialRtmr3,proto3" json:"initial_rtmr3,omitempty"`
-	// Ordered measurement log entries.
-	Measurements []*MeasurementEntry `protobuf:"bytes,6,rep,name=measurements,proto3" json:"measurements,omitempty"`
-	// Challenge nonce (hex-encoded).
-	Nonce string `protobuf:"bytes,7,opt,name=nonce,proto3" json:"nonce,omitempty"`
-	// Reportdata = SHA384(nonce || rtmr3), hex-encoded.
-	ReportData string `protobuf:"bytes,8,opt,name=report_data,json=reportData,proto3" json:"report_data,omitempty"`
-	// Optional: TDX TD Quote (binary).
-	TdQuote []byte `protobuf:"bytes,9,opt,name=td_quote,json=tdQuote,proto3" json:"td_quote,omitempty"`
-	// Container image reference (e.g., "docker.io/library/nginx:latest").
-	ContainerImage string `protobuf:"bytes,10,opt,name=container_image,json=containerImage,proto3" json:"container_image,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Stable workload identity — the refstore lookup key. Must match the
+	// `workload_id` used by trustd.AttestWorkload.
+	WorkloadId string `protobuf:"bytes,1,opt,name=workload_id,json=workloadId,proto3" json:"workload_id,omitempty"`
+	// Raw TDX quote bytes (signed by Intel DCAP; contains RTMR[0..3] + report_data).
+	TdQuote []byte `protobuf:"bytes,2,opt,name=td_quote,json=tdQuote,proto3" json:"td_quote,omitempty"`
+	// Bytes of the kernel's per-container event log at
+	// /sys/kernel/security/ima/container_rtmr/<mangled-cgroup>. Single
+	// JSON object per file.
+	EventLog []byte `protobuf:"bytes,3,opt,name=event_log,json=eventLog,proto3" json:"event_log,omitempty"`
+	// Verifier-chosen nonce (hex-encoded). Must match what trustd used for
+	// report_data construction.
+	NonceHex string `protobuf:"bytes,4,opt,name=nonce_hex,json=nonceHex,proto3" json:"nonce_hex,omitempty"`
+	// Peer public key bytes (empty = no channel binding).
+	PeerPk        []byte `protobuf:"bytes,5,opt,name=peer_pk,json=peerPk,proto3" json:"peer_pk,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *VerifyRequest) Reset() {
-	*x = VerifyRequest{}
-	mi := &file_v1_attestation_proto_msgTypes[0]
+func (x *VerifyWorkloadRequest) Reset() {
+	*x = VerifyWorkloadRequest{}
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *VerifyRequest) String() string {
+func (x *VerifyWorkloadRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*VerifyRequest) ProtoMessage() {}
+func (*VerifyWorkloadRequest) ProtoMessage() {}
 
-func (x *VerifyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[0]
+func (x *VerifyWorkloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -137,167 +131,76 @@ func (x *VerifyRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VerifyRequest.ProtoReflect.Descriptor instead.
-func (*VerifyRequest) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{0}
+// Deprecated: Use VerifyWorkloadRequest.ProtoReflect.Descriptor instead.
+func (*VerifyWorkloadRequest) Descriptor() ([]byte, []int) {
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *VerifyRequest) GetCgroupPath() string {
+func (x *VerifyWorkloadRequest) GetWorkloadId() string {
 	if x != nil {
-		return x.CgroupPath
+		return x.WorkloadId
 	}
 	return ""
 }
 
-func (x *VerifyRequest) GetVmiName() string {
-	if x != nil {
-		return x.VmiName
-	}
-	return ""
-}
-
-func (x *VerifyRequest) GetVmiNamespace() string {
-	if x != nil {
-		return x.VmiNamespace
-	}
-	return ""
-}
-
-func (x *VerifyRequest) GetRtmr3() string {
-	if x != nil {
-		return x.Rtmr3
-	}
-	return ""
-}
-
-func (x *VerifyRequest) GetInitialRtmr3() string {
-	if x != nil {
-		return x.InitialRtmr3
-	}
-	return ""
-}
-
-func (x *VerifyRequest) GetMeasurements() []*MeasurementEntry {
-	if x != nil {
-		return x.Measurements
-	}
-	return nil
-}
-
-func (x *VerifyRequest) GetNonce() string {
-	if x != nil {
-		return x.Nonce
-	}
-	return ""
-}
-
-func (x *VerifyRequest) GetReportData() string {
-	if x != nil {
-		return x.ReportData
-	}
-	return ""
-}
-
-func (x *VerifyRequest) GetTdQuote() []byte {
+func (x *VerifyWorkloadRequest) GetTdQuote() []byte {
 	if x != nil {
 		return x.TdQuote
 	}
 	return nil
 }
 
-func (x *VerifyRequest) GetContainerImage() string {
+func (x *VerifyWorkloadRequest) GetEventLog() []byte {
 	if x != nil {
-		return x.ContainerImage
+		return x.EventLog
+	}
+	return nil
+}
+
+func (x *VerifyWorkloadRequest) GetNonceHex() string {
+	if x != nil {
+		return x.NonceHex
 	}
 	return ""
 }
 
-// MeasurementEntry is a single file measurement.
-type MeasurementEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Digest        string                 `protobuf:"bytes,1,opt,name=digest,proto3" json:"digest,omitempty"` // SHA-384 hex
-	File          string                 `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`     // file path
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MeasurementEntry) Reset() {
-	*x = MeasurementEntry{}
-	mi := &file_v1_attestation_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MeasurementEntry) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MeasurementEntry) ProtoMessage() {}
-
-func (x *MeasurementEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[1]
+func (x *VerifyWorkloadRequest) GetPeerPk() []byte {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
+		return x.PeerPk
 	}
-	return mi.MessageOf(x)
+	return nil
 }
 
-// Deprecated: Use MeasurementEntry.ProtoReflect.Descriptor instead.
-func (*MeasurementEntry) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *MeasurementEntry) GetDigest() string {
-	if x != nil {
-		return x.Digest
-	}
-	return ""
-}
-
-func (x *MeasurementEntry) GetFile() string {
-	if x != nil {
-		return x.File
-	}
-	return ""
-}
-
-// VerifyResponse contains the verification result.
-type VerifyResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Trust verdict.
-	Verdict Verdict `protobuf:"varint,1,opt,name=verdict,proto3,enum=attestation.v1.Verdict" json:"verdict,omitempty"`
-	// Human-readable message explaining the verdict.
-	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	// JWT attestation result token (signed by the service).
-	// Contains the verdict, evidence hash, and timestamp.
-	AttestationToken string `protobuf:"bytes,3,opt,name=attestation_token,json=attestationToken,proto3" json:"attestation_token,omitempty"`
-	// Details about what matched/mismatched.
-	Details *VerificationDetails `protobuf:"bytes,4,opt,name=details,proto3" json:"details,omitempty"`
-	// Policy-selected remediation action for this verdict (`none|alert|restart|kill`).
+// VerifyWorkloadResponse carries the verdict plus structured per-check breakdown.
+type VerifyWorkloadResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Verdict Verdict                `protobuf:"varint,1,opt,name=verdict,proto3,enum=attestation.v1.Verdict" json:"verdict,omitempty"`
+	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// JWT attestation result token (signed by this service) — empty if
+	// the verdict is not TRUSTED.
+	AttestationToken string                       `protobuf:"bytes,3,opt,name=attestation_token,json=attestationToken,proto3" json:"attestation_token,omitempty"`
+	Details          *WorkloadVerificationDetails `protobuf:"bytes,4,opt,name=details,proto3" json:"details,omitempty"`
+	// Policy-selected remediation action (`none|alert|restart|kill`).
 	PolicyAction  string `protobuf:"bytes,5,opt,name=policy_action,json=policyAction,proto3" json:"policy_action,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *VerifyResponse) Reset() {
-	*x = VerifyResponse{}
-	mi := &file_v1_attestation_proto_msgTypes[2]
+func (x *VerifyWorkloadResponse) Reset() {
+	*x = VerifyWorkloadResponse{}
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *VerifyResponse) String() string {
+func (x *VerifyWorkloadResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*VerifyResponse) ProtoMessage() {}
+func (*VerifyWorkloadResponse) ProtoMessage() {}
 
-func (x *VerifyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[2]
+func (x *VerifyWorkloadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -308,86 +211,80 @@ func (x *VerifyResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VerifyResponse.ProtoReflect.Descriptor instead.
-func (*VerifyResponse) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{2}
+// Deprecated: Use VerifyWorkloadResponse.ProtoReflect.Descriptor instead.
+func (*VerifyWorkloadResponse) Descriptor() ([]byte, []int) {
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *VerifyResponse) GetVerdict() Verdict {
+func (x *VerifyWorkloadResponse) GetVerdict() Verdict {
 	if x != nil {
 		return x.Verdict
 	}
 	return Verdict_VERDICT_UNSPECIFIED
 }
 
-func (x *VerifyResponse) GetMessage() string {
+func (x *VerifyWorkloadResponse) GetMessage() string {
 	if x != nil {
 		return x.Message
 	}
 	return ""
 }
 
-func (x *VerifyResponse) GetAttestationToken() string {
+func (x *VerifyWorkloadResponse) GetAttestationToken() string {
 	if x != nil {
 		return x.AttestationToken
 	}
 	return ""
 }
 
-func (x *VerifyResponse) GetDetails() *VerificationDetails {
+func (x *VerifyWorkloadResponse) GetDetails() *WorkloadVerificationDetails {
 	if x != nil {
 		return x.Details
 	}
 	return nil
 }
 
-func (x *VerifyResponse) GetPolicyAction() string {
+func (x *VerifyWorkloadResponse) GetPolicyAction() string {
 	if x != nil {
 		return x.PolicyAction
 	}
 	return ""
 }
 
-// VerificationDetails provides insight into the verification process.
-type VerificationDetails struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Whether RTMR3 replay matched the reported value.
-	Rtmr3ReplayValid bool `protobuf:"varint,1,opt,name=rtmr3_replay_valid,json=rtmr3ReplayValid,proto3" json:"rtmr3_replay_valid,omitempty"`
-	// Whether all required reference values were found in measurements.
-	AllRequiredPresent bool `protobuf:"varint,2,opt,name=all_required_present,json=allRequiredPresent,proto3" json:"all_required_present,omitempty"`
-	// Number of measurements matching reference values.
-	MatchedCount int32 `protobuf:"varint,3,opt,name=matched_count,json=matchedCount,proto3" json:"matched_count,omitempty"`
-	// Number of measurements not in reference values (unknown files).
-	UnknownCount int32 `protobuf:"varint,4,opt,name=unknown_count,json=unknownCount,proto3" json:"unknown_count,omitempty"`
-	// Number of required reference values missing from measurements.
-	MissingCount int32 `protobuf:"varint,5,opt,name=missing_count,json=missingCount,proto3" json:"missing_count,omitempty"`
-	// Whether the TD Quote signature is valid.
-	QuoteSignatureValid bool `protobuf:"varint,6,opt,name=quote_signature_valid,json=quoteSignatureValid,proto3" json:"quote_signature_valid,omitempty"`
-	// Whether quote verification was skipped (insecure mode).
-	QuoteVerificationSkipped bool `protobuf:"varint,7,opt,name=quote_verification_skipped,json=quoteVerificationSkipped,proto3" json:"quote_verification_skipped,omitempty"`
-	// List of unknown files found in measurements.
-	UnknownFiles []string `protobuf:"bytes,8,rep,name=unknown_files,json=unknownFiles,proto3" json:"unknown_files,omitempty"`
-	// List of required files missing from measurements.
-	MissingFiles  []string `protobuf:"bytes,9,rep,name=missing_files,json=missingFiles,proto3" json:"missing_files,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+// WorkloadVerificationDetails provides insight into which subcheck failed.
+type WorkloadVerificationDetails struct {
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	QuoteSignatureValid      bool                   `protobuf:"varint,1,opt,name=quote_signature_valid,json=quoteSignatureValid,proto3" json:"quote_signature_valid,omitempty"`
+	QuoteVerificationSkipped bool                   `protobuf:"varint,2,opt,name=quote_verification_skipped,json=quoteVerificationSkipped,proto3" json:"quote_verification_skipped,omitempty"`
+	// RTMR[2] in the quote is an enrolled TCB reference (the kernel is genuine).
+	TcbMatches bool `protobuf:"varint,3,opt,name=tcb_matches,json=tcbMatches,proto3" json:"tcb_matches,omitempty"`
+	// report_data = SHA384(nonce) || SHA384(peer_pk or 0s).
+	ReportDataValid    bool     `protobuf:"varint,4,opt,name=report_data_valid,json=reportDataValid,proto3" json:"report_data_valid,omitempty"`
+	MatchedCount       int32    `protobuf:"varint,5,opt,name=matched_count,json=matchedCount,proto3" json:"matched_count,omitempty"`
+	UnknownCount       int32    `protobuf:"varint,6,opt,name=unknown_count,json=unknownCount,proto3" json:"unknown_count,omitempty"`
+	MissingCount       int32    `protobuf:"varint,7,opt,name=missing_count,json=missingCount,proto3" json:"missing_count,omitempty"`
+	AllRequiredPresent bool     `protobuf:"varint,8,opt,name=all_required_present,json=allRequiredPresent,proto3" json:"all_required_present,omitempty"`
+	UnknownFiles       []string `protobuf:"bytes,9,rep,name=unknown_files,json=unknownFiles,proto3" json:"unknown_files,omitempty"`
+	MissingFiles       []string `protobuf:"bytes,10,rep,name=missing_files,json=missingFiles,proto3" json:"missing_files,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
-func (x *VerificationDetails) Reset() {
-	*x = VerificationDetails{}
-	mi := &file_v1_attestation_proto_msgTypes[3]
+func (x *WorkloadVerificationDetails) Reset() {
+	*x = WorkloadVerificationDetails{}
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *VerificationDetails) String() string {
+func (x *WorkloadVerificationDetails) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*VerificationDetails) ProtoMessage() {}
+func (*WorkloadVerificationDetails) ProtoMessage() {}
 
-func (x *VerificationDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[3]
+func (x *WorkloadVerificationDetails) ProtoReflect() protoreflect.Message {
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -398,68 +295,75 @@ func (x *VerificationDetails) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VerificationDetails.ProtoReflect.Descriptor instead.
-func (*VerificationDetails) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{3}
+// Deprecated: Use WorkloadVerificationDetails.ProtoReflect.Descriptor instead.
+func (*WorkloadVerificationDetails) Descriptor() ([]byte, []int) {
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *VerificationDetails) GetRtmr3ReplayValid() bool {
-	if x != nil {
-		return x.Rtmr3ReplayValid
-	}
-	return false
-}
-
-func (x *VerificationDetails) GetAllRequiredPresent() bool {
-	if x != nil {
-		return x.AllRequiredPresent
-	}
-	return false
-}
-
-func (x *VerificationDetails) GetMatchedCount() int32 {
-	if x != nil {
-		return x.MatchedCount
-	}
-	return 0
-}
-
-func (x *VerificationDetails) GetUnknownCount() int32 {
-	if x != nil {
-		return x.UnknownCount
-	}
-	return 0
-}
-
-func (x *VerificationDetails) GetMissingCount() int32 {
-	if x != nil {
-		return x.MissingCount
-	}
-	return 0
-}
-
-func (x *VerificationDetails) GetQuoteSignatureValid() bool {
+func (x *WorkloadVerificationDetails) GetQuoteSignatureValid() bool {
 	if x != nil {
 		return x.QuoteSignatureValid
 	}
 	return false
 }
 
-func (x *VerificationDetails) GetQuoteVerificationSkipped() bool {
+func (x *WorkloadVerificationDetails) GetQuoteVerificationSkipped() bool {
 	if x != nil {
 		return x.QuoteVerificationSkipped
 	}
 	return false
 }
 
-func (x *VerificationDetails) GetUnknownFiles() []string {
+func (x *WorkloadVerificationDetails) GetTcbMatches() bool {
+	if x != nil {
+		return x.TcbMatches
+	}
+	return false
+}
+
+func (x *WorkloadVerificationDetails) GetReportDataValid() bool {
+	if x != nil {
+		return x.ReportDataValid
+	}
+	return false
+}
+
+func (x *WorkloadVerificationDetails) GetMatchedCount() int32 {
+	if x != nil {
+		return x.MatchedCount
+	}
+	return 0
+}
+
+func (x *WorkloadVerificationDetails) GetUnknownCount() int32 {
+	if x != nil {
+		return x.UnknownCount
+	}
+	return 0
+}
+
+func (x *WorkloadVerificationDetails) GetMissingCount() int32 {
+	if x != nil {
+		return x.MissingCount
+	}
+	return 0
+}
+
+func (x *WorkloadVerificationDetails) GetAllRequiredPresent() bool {
+	if x != nil {
+		return x.AllRequiredPresent
+	}
+	return false
+}
+
+func (x *WorkloadVerificationDetails) GetUnknownFiles() []string {
 	if x != nil {
 		return x.UnknownFiles
 	}
 	return nil
 }
 
-func (x *VerificationDetails) GetMissingFiles() []string {
+func (x *WorkloadVerificationDetails) GetMissingFiles() []string {
 	if x != nil {
 		return x.MissingFiles
 	}
@@ -479,7 +383,7 @@ type SetReferenceValuesRequest struct {
 
 func (x *SetReferenceValuesRequest) Reset() {
 	*x = SetReferenceValuesRequest{}
-	mi := &file_v1_attestation_proto_msgTypes[4]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -491,7 +395,7 @@ func (x *SetReferenceValuesRequest) String() string {
 func (*SetReferenceValuesRequest) ProtoMessage() {}
 
 func (x *SetReferenceValuesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[4]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -504,7 +408,7 @@ func (x *SetReferenceValuesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetReferenceValuesRequest.ProtoReflect.Descriptor instead.
 func (*SetReferenceValuesRequest) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{4}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SetReferenceValuesRequest) GetContainerImage() string {
@@ -531,7 +435,7 @@ type SetReferenceValuesResponse struct {
 
 func (x *SetReferenceValuesResponse) Reset() {
 	*x = SetReferenceValuesResponse{}
-	mi := &file_v1_attestation_proto_msgTypes[5]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -543,7 +447,7 @@ func (x *SetReferenceValuesResponse) String() string {
 func (*SetReferenceValuesResponse) ProtoMessage() {}
 
 func (x *SetReferenceValuesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[5]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -556,7 +460,7 @@ func (x *SetReferenceValuesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetReferenceValuesResponse.ProtoReflect.Descriptor instead.
 func (*SetReferenceValuesResponse) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{5}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SetReferenceValuesResponse) GetMessage() string {
@@ -576,7 +480,7 @@ type GetReferenceValuesRequest struct {
 
 func (x *GetReferenceValuesRequest) Reset() {
 	*x = GetReferenceValuesRequest{}
-	mi := &file_v1_attestation_proto_msgTypes[6]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -588,7 +492,7 @@ func (x *GetReferenceValuesRequest) String() string {
 func (*GetReferenceValuesRequest) ProtoMessage() {}
 
 func (x *GetReferenceValuesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[6]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -601,7 +505,7 @@ func (x *GetReferenceValuesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReferenceValuesRequest.ProtoReflect.Descriptor instead.
 func (*GetReferenceValuesRequest) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{6}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetReferenceValuesRequest) GetContainerImage() string {
@@ -626,7 +530,7 @@ type ReferenceValues struct {
 
 func (x *ReferenceValues) Reset() {
 	*x = ReferenceValues{}
-	mi := &file_v1_attestation_proto_msgTypes[7]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -638,7 +542,7 @@ func (x *ReferenceValues) String() string {
 func (*ReferenceValues) ProtoMessage() {}
 
 func (x *ReferenceValues) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[7]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -651,7 +555,7 @@ func (x *ReferenceValues) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReferenceValues.ProtoReflect.Descriptor instead.
 func (*ReferenceValues) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{7}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ReferenceValues) GetContainerImage() string {
@@ -690,7 +594,7 @@ type ReferenceEntry struct {
 
 func (x *ReferenceEntry) Reset() {
 	*x = ReferenceEntry{}
-	mi := &file_v1_attestation_proto_msgTypes[8]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -702,7 +606,7 @@ func (x *ReferenceEntry) String() string {
 func (*ReferenceEntry) ProtoMessage() {}
 
 func (x *ReferenceEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[8]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -715,7 +619,7 @@ func (x *ReferenceEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReferenceEntry.ProtoReflect.Descriptor instead.
 func (*ReferenceEntry) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{8}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ReferenceEntry) GetFilename() string {
@@ -748,7 +652,7 @@ type HealthRequest struct {
 
 func (x *HealthRequest) Reset() {
 	*x = HealthRequest{}
-	mi := &file_v1_attestation_proto_msgTypes[9]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -760,7 +664,7 @@ func (x *HealthRequest) String() string {
 func (*HealthRequest) ProtoMessage() {}
 
 func (x *HealthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[9]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -773,7 +677,7 @@ func (x *HealthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthRequest.ProtoReflect.Descriptor instead.
 func (*HealthRequest) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{9}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{8}
 }
 
 // HealthResponse returns health status.
@@ -788,7 +692,7 @@ type HealthResponse struct {
 
 func (x *HealthResponse) Reset() {
 	*x = HealthResponse{}
-	mi := &file_v1_attestation_proto_msgTypes[10]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -800,7 +704,7 @@ func (x *HealthResponse) String() string {
 func (*HealthResponse) ProtoMessage() {}
 
 func (x *HealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[10]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -813,7 +717,7 @@ func (x *HealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthResponse.ProtoReflect.Descriptor instead.
 func (*HealthResponse) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{10}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *HealthResponse) GetStatus() string {
@@ -852,7 +756,7 @@ type UpdateLatestVerdictRequest struct {
 
 func (x *UpdateLatestVerdictRequest) Reset() {
 	*x = UpdateLatestVerdictRequest{}
-	mi := &file_v1_attestation_proto_msgTypes[11]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -864,7 +768,7 @@ func (x *UpdateLatestVerdictRequest) String() string {
 func (*UpdateLatestVerdictRequest) ProtoMessage() {}
 
 func (x *UpdateLatestVerdictRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[11]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -877,7 +781,7 @@ func (x *UpdateLatestVerdictRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateLatestVerdictRequest.ProtoReflect.Descriptor instead.
 func (*UpdateLatestVerdictRequest) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{11}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *UpdateLatestVerdictRequest) GetSubjects() []string {
@@ -925,7 +829,7 @@ type UpdateLatestVerdictResponse struct {
 
 func (x *UpdateLatestVerdictResponse) Reset() {
 	*x = UpdateLatestVerdictResponse{}
-	mi := &file_v1_attestation_proto_msgTypes[12]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -937,7 +841,7 @@ func (x *UpdateLatestVerdictResponse) String() string {
 func (*UpdateLatestVerdictResponse) ProtoMessage() {}
 
 func (x *UpdateLatestVerdictResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[12]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -950,7 +854,7 @@ func (x *UpdateLatestVerdictResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateLatestVerdictResponse.ProtoReflect.Descriptor instead.
 func (*UpdateLatestVerdictResponse) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{12}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *UpdateLatestVerdictResponse) GetUpdated() uint32 {
@@ -971,7 +875,7 @@ type GetLatestVerdictRequest struct {
 
 func (x *GetLatestVerdictRequest) Reset() {
 	*x = GetLatestVerdictRequest{}
-	mi := &file_v1_attestation_proto_msgTypes[13]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -983,7 +887,7 @@ func (x *GetLatestVerdictRequest) String() string {
 func (*GetLatestVerdictRequest) ProtoMessage() {}
 
 func (x *GetLatestVerdictRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[13]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -996,7 +900,7 @@ func (x *GetLatestVerdictRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLatestVerdictRequest.ProtoReflect.Descriptor instead.
 func (*GetLatestVerdictRequest) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{13}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetLatestVerdictRequest) GetSubject() string {
@@ -1024,7 +928,7 @@ type GetLatestVerdictResponse struct {
 
 func (x *GetLatestVerdictResponse) Reset() {
 	*x = GetLatestVerdictResponse{}
-	mi := &file_v1_attestation_proto_msgTypes[14]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1036,7 +940,7 @@ func (x *GetLatestVerdictResponse) String() string {
 func (*GetLatestVerdictResponse) ProtoMessage() {}
 
 func (x *GetLatestVerdictResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[14]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1049,7 +953,7 @@ func (x *GetLatestVerdictResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLatestVerdictResponse.ProtoReflect.Descriptor instead.
 func (*GetLatestVerdictResponse) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{14}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetLatestVerdictResponse) GetSubject() string {
@@ -1129,7 +1033,7 @@ type WatchVerdictUpdatesRequest struct {
 
 func (x *WatchVerdictUpdatesRequest) Reset() {
 	*x = WatchVerdictUpdatesRequest{}
-	mi := &file_v1_attestation_proto_msgTypes[15]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1141,7 +1045,7 @@ func (x *WatchVerdictUpdatesRequest) String() string {
 func (*WatchVerdictUpdatesRequest) ProtoMessage() {}
 
 func (x *WatchVerdictUpdatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[15]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1154,7 +1058,7 @@ func (x *WatchVerdictUpdatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchVerdictUpdatesRequest.ProtoReflect.Descriptor instead.
 func (*WatchVerdictUpdatesRequest) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{15}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *WatchVerdictUpdatesRequest) GetSubjects() []string {
@@ -1189,7 +1093,7 @@ type VerdictUpdate struct {
 
 func (x *VerdictUpdate) Reset() {
 	*x = VerdictUpdate{}
-	mi := &file_v1_attestation_proto_msgTypes[16]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1201,7 +1105,7 @@ func (x *VerdictUpdate) String() string {
 func (*VerdictUpdate) ProtoMessage() {}
 
 func (x *VerdictUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_attestation_proto_msgTypes[16]
+	mi := &file_attestationproto_v1_attestation_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1214,7 +1118,7 @@ func (x *VerdictUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerdictUpdate.ProtoReflect.Descriptor instead.
 func (*VerdictUpdate) Descriptor() ([]byte, []int) {
-	return file_v1_attestation_proto_rawDescGZIP(), []int{16}
+	return file_attestationproto_v1_attestation_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *VerdictUpdate) GetSubject() string {
@@ -1280,44 +1184,37 @@ func (x *VerdictUpdate) GetSource() string {
 	return ""
 }
 
-var File_v1_attestation_proto protoreflect.FileDescriptor
+var File_attestationproto_v1_attestation_proto protoreflect.FileDescriptor
 
-const file_v1_attestation_proto_rawDesc = "" +
+const file_attestationproto_v1_attestation_proto_rawDesc = "" +
 	"\n" +
-	"\x14v1/attestation.proto\x12\x0eattestation.v1\"\xec\x02\n" +
-	"\rVerifyRequest\x12\x1f\n" +
-	"\vcgroup_path\x18\x01 \x01(\tR\n" +
-	"cgroupPath\x12\x19\n" +
-	"\bvmi_name\x18\x02 \x01(\tR\avmiName\x12#\n" +
-	"\rvmi_namespace\x18\x03 \x01(\tR\fvmiNamespace\x12\x14\n" +
-	"\x05rtmr3\x18\x04 \x01(\tR\x05rtmr3\x12#\n" +
-	"\rinitial_rtmr3\x18\x05 \x01(\tR\finitialRtmr3\x12D\n" +
-	"\fmeasurements\x18\x06 \x03(\v2 .attestation.v1.MeasurementEntryR\fmeasurements\x12\x14\n" +
-	"\x05nonce\x18\a \x01(\tR\x05nonce\x12\x1f\n" +
-	"\vreport_data\x18\b \x01(\tR\n" +
-	"reportData\x12\x19\n" +
-	"\btd_quote\x18\t \x01(\fR\atdQuote\x12'\n" +
-	"\x0fcontainer_image\x18\n" +
-	" \x01(\tR\x0econtainerImage\">\n" +
-	"\x10MeasurementEntry\x12\x16\n" +
-	"\x06digest\x18\x01 \x01(\tR\x06digest\x12\x12\n" +
-	"\x04file\x18\x02 \x01(\tR\x04file\"\xee\x01\n" +
-	"\x0eVerifyResponse\x121\n" +
+	"%attestationproto/v1/attestation.proto\x12\x0eattestation.v1\"\xa6\x01\n" +
+	"\x15VerifyWorkloadRequest\x12\x1f\n" +
+	"\vworkload_id\x18\x01 \x01(\tR\n" +
+	"workloadId\x12\x19\n" +
+	"\btd_quote\x18\x02 \x01(\fR\atdQuote\x12\x1b\n" +
+	"\tevent_log\x18\x03 \x01(\fR\beventLog\x12\x1b\n" +
+	"\tnonce_hex\x18\x04 \x01(\tR\bnonceHex\x12\x17\n" +
+	"\apeer_pk\x18\x05 \x01(\fR\x06peerPk\"\xfe\x01\n" +
+	"\x16VerifyWorkloadResponse\x121\n" +
 	"\averdict\x18\x01 \x01(\x0e2\x17.attestation.v1.VerdictR\averdict\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12+\n" +
-	"\x11attestation_token\x18\x03 \x01(\tR\x10attestationToken\x12=\n" +
-	"\adetails\x18\x04 \x01(\v2#.attestation.v1.VerificationDetailsR\adetails\x12#\n" +
-	"\rpolicy_action\x18\x05 \x01(\tR\fpolicyAction\"\xa0\x03\n" +
-	"\x13VerificationDetails\x12,\n" +
-	"\x12rtmr3_replay_valid\x18\x01 \x01(\bR\x10rtmr3ReplayValid\x120\n" +
-	"\x14all_required_present\x18\x02 \x01(\bR\x12allRequiredPresent\x12#\n" +
-	"\rmatched_count\x18\x03 \x01(\x05R\fmatchedCount\x12#\n" +
-	"\runknown_count\x18\x04 \x01(\x05R\funknownCount\x12#\n" +
-	"\rmissing_count\x18\x05 \x01(\x05R\fmissingCount\x122\n" +
-	"\x15quote_signature_valid\x18\x06 \x01(\bR\x13quoteSignatureValid\x12<\n" +
-	"\x1aquote_verification_skipped\x18\a \x01(\bR\x18quoteVerificationSkipped\x12#\n" +
-	"\runknown_files\x18\b \x03(\tR\funknownFiles\x12#\n" +
-	"\rmissing_files\x18\t \x03(\tR\fmissingFiles\"\x90\x01\n" +
+	"\x11attestation_token\x18\x03 \x01(\tR\x10attestationToken\x12E\n" +
+	"\adetails\x18\x04 \x01(\v2+.attestation.v1.WorkloadVerificationDetailsR\adetails\x12#\n" +
+	"\rpolicy_action\x18\x05 \x01(\tR\fpolicyAction\"\xc7\x03\n" +
+	"\x1bWorkloadVerificationDetails\x122\n" +
+	"\x15quote_signature_valid\x18\x01 \x01(\bR\x13quoteSignatureValid\x12<\n" +
+	"\x1aquote_verification_skipped\x18\x02 \x01(\bR\x18quoteVerificationSkipped\x12\x1f\n" +
+	"\vtcb_matches\x18\x03 \x01(\bR\n" +
+	"tcbMatches\x12*\n" +
+	"\x11report_data_valid\x18\x04 \x01(\bR\x0freportDataValid\x12#\n" +
+	"\rmatched_count\x18\x05 \x01(\x05R\fmatchedCount\x12#\n" +
+	"\runknown_count\x18\x06 \x01(\x05R\funknownCount\x12#\n" +
+	"\rmissing_count\x18\a \x01(\x05R\fmissingCount\x120\n" +
+	"\x14all_required_present\x18\b \x01(\bR\x12allRequiredPresent\x12#\n" +
+	"\runknown_files\x18\t \x03(\tR\funknownFiles\x12#\n" +
+	"\rmissing_files\x18\n" +
+	" \x03(\tR\fmissingFiles\"\x90\x01\n" +
 	"\x19SetReferenceValuesRequest\x12'\n" +
 	"\x0fcontainer_image\x18\x01 \x01(\tR\x0econtainerImage\x12J\n" +
 	"\x10reference_values\x18\x02 \x01(\v2\x1f.attestation.v1.ReferenceValuesR\x0freferenceValues\"6\n" +
@@ -1381,101 +1278,99 @@ const file_v1_attestation_proto_rawDesc = "" +
 	"\x0fVERDICT_TRUSTED\x10\x01\x12\x15\n" +
 	"\x11VERDICT_UNTRUSTED\x10\x02\x12\x11\n" +
 	"\rVERDICT_STALE\x10\x03\x12\x13\n" +
-	"\x0fVERDICT_UNKNOWN\x10\x042\xc1\x05\n" +
-	"\x12AttestationService\x12X\n" +
-	"\x17VerifyContainerEvidence\x12\x1d.attestation.v1.VerifyRequest\x1a\x1e.attestation.v1.VerifyResponse\x12k\n" +
+	"\x0fVERDICT_UNKNOWN\x10\x042\xc8\x05\n" +
+	"\x12AttestationService\x12_\n" +
+	"\x0eVerifyWorkload\x12%.attestation.v1.VerifyWorkloadRequest\x1a&.attestation.v1.VerifyWorkloadResponse\x12k\n" +
 	"\x12SetReferenceValues\x12).attestation.v1.SetReferenceValuesRequest\x1a*.attestation.v1.SetReferenceValuesResponse\x12`\n" +
 	"\x12GetReferenceValues\x12).attestation.v1.GetReferenceValuesRequest\x1a\x1f.attestation.v1.ReferenceValues\x12G\n" +
 	"\x06Health\x12\x1d.attestation.v1.HealthRequest\x1a\x1e.attestation.v1.HealthResponse\x12n\n" +
 	"\x13UpdateLatestVerdict\x12*.attestation.v1.UpdateLatestVerdictRequest\x1a+.attestation.v1.UpdateLatestVerdictResponse\x12e\n" +
 	"\x10GetLatestVerdict\x12'.attestation.v1.GetLatestVerdictRequest\x1a(.attestation.v1.GetLatestVerdictResponse\x12b\n" +
-	"\x13WatchVerdictUpdates\x12*.attestation.v1.WatchVerdictUpdatesRequest\x1a\x1d.attestation.v1.VerdictUpdate0\x01BCZAgithub.com/trustfncall/attestation-service/proto/v1;attestationv1b\x06proto3"
+	"\x13WatchVerdictUpdates\x12*.attestation.v1.WatchVerdictUpdatesRequest\x1a\x1d.attestation.v1.VerdictUpdate0\x01BPZNkubevirt.io/kubevirt/pkg/virt-handler/trustd/attestationproto/v1;attestationv1b\x06proto3"
 
 var (
-	file_v1_attestation_proto_rawDescOnce sync.Once
-	file_v1_attestation_proto_rawDescData []byte
+	file_attestationproto_v1_attestation_proto_rawDescOnce sync.Once
+	file_attestationproto_v1_attestation_proto_rawDescData []byte
 )
 
-func file_v1_attestation_proto_rawDescGZIP() []byte {
-	file_v1_attestation_proto_rawDescOnce.Do(func() {
-		file_v1_attestation_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v1_attestation_proto_rawDesc), len(file_v1_attestation_proto_rawDesc)))
+func file_attestationproto_v1_attestation_proto_rawDescGZIP() []byte {
+	file_attestationproto_v1_attestation_proto_rawDescOnce.Do(func() {
+		file_attestationproto_v1_attestation_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_attestationproto_v1_attestation_proto_rawDesc), len(file_attestationproto_v1_attestation_proto_rawDesc)))
 	})
-	return file_v1_attestation_proto_rawDescData
+	return file_attestationproto_v1_attestation_proto_rawDescData
 }
 
-var file_v1_attestation_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_v1_attestation_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
-var file_v1_attestation_proto_goTypes = []any{
+var file_attestationproto_v1_attestation_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_attestationproto_v1_attestation_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_attestationproto_v1_attestation_proto_goTypes = []any{
 	(Verdict)(0),                        // 0: attestation.v1.Verdict
-	(*VerifyRequest)(nil),               // 1: attestation.v1.VerifyRequest
-	(*MeasurementEntry)(nil),            // 2: attestation.v1.MeasurementEntry
-	(*VerifyResponse)(nil),              // 3: attestation.v1.VerifyResponse
-	(*VerificationDetails)(nil),         // 4: attestation.v1.VerificationDetails
-	(*SetReferenceValuesRequest)(nil),   // 5: attestation.v1.SetReferenceValuesRequest
-	(*SetReferenceValuesResponse)(nil),  // 6: attestation.v1.SetReferenceValuesResponse
-	(*GetReferenceValuesRequest)(nil),   // 7: attestation.v1.GetReferenceValuesRequest
-	(*ReferenceValues)(nil),             // 8: attestation.v1.ReferenceValues
-	(*ReferenceEntry)(nil),              // 9: attestation.v1.ReferenceEntry
-	(*HealthRequest)(nil),               // 10: attestation.v1.HealthRequest
-	(*HealthResponse)(nil),              // 11: attestation.v1.HealthResponse
-	(*UpdateLatestVerdictRequest)(nil),  // 12: attestation.v1.UpdateLatestVerdictRequest
-	(*UpdateLatestVerdictResponse)(nil), // 13: attestation.v1.UpdateLatestVerdictResponse
-	(*GetLatestVerdictRequest)(nil),     // 14: attestation.v1.GetLatestVerdictRequest
-	(*GetLatestVerdictResponse)(nil),    // 15: attestation.v1.GetLatestVerdictResponse
-	(*WatchVerdictUpdatesRequest)(nil),  // 16: attestation.v1.WatchVerdictUpdatesRequest
-	(*VerdictUpdate)(nil),               // 17: attestation.v1.VerdictUpdate
+	(*VerifyWorkloadRequest)(nil),       // 1: attestation.v1.VerifyWorkloadRequest
+	(*VerifyWorkloadResponse)(nil),      // 2: attestation.v1.VerifyWorkloadResponse
+	(*WorkloadVerificationDetails)(nil), // 3: attestation.v1.WorkloadVerificationDetails
+	(*SetReferenceValuesRequest)(nil),   // 4: attestation.v1.SetReferenceValuesRequest
+	(*SetReferenceValuesResponse)(nil),  // 5: attestation.v1.SetReferenceValuesResponse
+	(*GetReferenceValuesRequest)(nil),   // 6: attestation.v1.GetReferenceValuesRequest
+	(*ReferenceValues)(nil),             // 7: attestation.v1.ReferenceValues
+	(*ReferenceEntry)(nil),              // 8: attestation.v1.ReferenceEntry
+	(*HealthRequest)(nil),               // 9: attestation.v1.HealthRequest
+	(*HealthResponse)(nil),              // 10: attestation.v1.HealthResponse
+	(*UpdateLatestVerdictRequest)(nil),  // 11: attestation.v1.UpdateLatestVerdictRequest
+	(*UpdateLatestVerdictResponse)(nil), // 12: attestation.v1.UpdateLatestVerdictResponse
+	(*GetLatestVerdictRequest)(nil),     // 13: attestation.v1.GetLatestVerdictRequest
+	(*GetLatestVerdictResponse)(nil),    // 14: attestation.v1.GetLatestVerdictResponse
+	(*WatchVerdictUpdatesRequest)(nil),  // 15: attestation.v1.WatchVerdictUpdatesRequest
+	(*VerdictUpdate)(nil),               // 16: attestation.v1.VerdictUpdate
 }
-var file_v1_attestation_proto_depIdxs = []int32{
-	2,  // 0: attestation.v1.VerifyRequest.measurements:type_name -> attestation.v1.MeasurementEntry
-	0,  // 1: attestation.v1.VerifyResponse.verdict:type_name -> attestation.v1.Verdict
-	4,  // 2: attestation.v1.VerifyResponse.details:type_name -> attestation.v1.VerificationDetails
-	8,  // 3: attestation.v1.SetReferenceValuesRequest.reference_values:type_name -> attestation.v1.ReferenceValues
-	9,  // 4: attestation.v1.ReferenceValues.entries:type_name -> attestation.v1.ReferenceEntry
-	0,  // 5: attestation.v1.UpdateLatestVerdictRequest.verdict:type_name -> attestation.v1.Verdict
-	0,  // 6: attestation.v1.GetLatestVerdictResponse.verdict:type_name -> attestation.v1.Verdict
-	0,  // 7: attestation.v1.VerdictUpdate.verdict:type_name -> attestation.v1.Verdict
-	1,  // 8: attestation.v1.AttestationService.VerifyContainerEvidence:input_type -> attestation.v1.VerifyRequest
-	5,  // 9: attestation.v1.AttestationService.SetReferenceValues:input_type -> attestation.v1.SetReferenceValuesRequest
-	7,  // 10: attestation.v1.AttestationService.GetReferenceValues:input_type -> attestation.v1.GetReferenceValuesRequest
-	10, // 11: attestation.v1.AttestationService.Health:input_type -> attestation.v1.HealthRequest
-	12, // 12: attestation.v1.AttestationService.UpdateLatestVerdict:input_type -> attestation.v1.UpdateLatestVerdictRequest
-	14, // 13: attestation.v1.AttestationService.GetLatestVerdict:input_type -> attestation.v1.GetLatestVerdictRequest
-	16, // 14: attestation.v1.AttestationService.WatchVerdictUpdates:input_type -> attestation.v1.WatchVerdictUpdatesRequest
-	3,  // 15: attestation.v1.AttestationService.VerifyContainerEvidence:output_type -> attestation.v1.VerifyResponse
-	6,  // 16: attestation.v1.AttestationService.SetReferenceValues:output_type -> attestation.v1.SetReferenceValuesResponse
-	8,  // 17: attestation.v1.AttestationService.GetReferenceValues:output_type -> attestation.v1.ReferenceValues
-	11, // 18: attestation.v1.AttestationService.Health:output_type -> attestation.v1.HealthResponse
-	13, // 19: attestation.v1.AttestationService.UpdateLatestVerdict:output_type -> attestation.v1.UpdateLatestVerdictResponse
-	15, // 20: attestation.v1.AttestationService.GetLatestVerdict:output_type -> attestation.v1.GetLatestVerdictResponse
-	17, // 21: attestation.v1.AttestationService.WatchVerdictUpdates:output_type -> attestation.v1.VerdictUpdate
-	15, // [15:22] is the sub-list for method output_type
-	8,  // [8:15] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+var file_attestationproto_v1_attestation_proto_depIdxs = []int32{
+	0,  // 0: attestation.v1.VerifyWorkloadResponse.verdict:type_name -> attestation.v1.Verdict
+	3,  // 1: attestation.v1.VerifyWorkloadResponse.details:type_name -> attestation.v1.WorkloadVerificationDetails
+	7,  // 2: attestation.v1.SetReferenceValuesRequest.reference_values:type_name -> attestation.v1.ReferenceValues
+	8,  // 3: attestation.v1.ReferenceValues.entries:type_name -> attestation.v1.ReferenceEntry
+	0,  // 4: attestation.v1.UpdateLatestVerdictRequest.verdict:type_name -> attestation.v1.Verdict
+	0,  // 5: attestation.v1.GetLatestVerdictResponse.verdict:type_name -> attestation.v1.Verdict
+	0,  // 6: attestation.v1.VerdictUpdate.verdict:type_name -> attestation.v1.Verdict
+	1,  // 7: attestation.v1.AttestationService.VerifyWorkload:input_type -> attestation.v1.VerifyWorkloadRequest
+	4,  // 8: attestation.v1.AttestationService.SetReferenceValues:input_type -> attestation.v1.SetReferenceValuesRequest
+	6,  // 9: attestation.v1.AttestationService.GetReferenceValues:input_type -> attestation.v1.GetReferenceValuesRequest
+	9,  // 10: attestation.v1.AttestationService.Health:input_type -> attestation.v1.HealthRequest
+	11, // 11: attestation.v1.AttestationService.UpdateLatestVerdict:input_type -> attestation.v1.UpdateLatestVerdictRequest
+	13, // 12: attestation.v1.AttestationService.GetLatestVerdict:input_type -> attestation.v1.GetLatestVerdictRequest
+	15, // 13: attestation.v1.AttestationService.WatchVerdictUpdates:input_type -> attestation.v1.WatchVerdictUpdatesRequest
+	2,  // 14: attestation.v1.AttestationService.VerifyWorkload:output_type -> attestation.v1.VerifyWorkloadResponse
+	5,  // 15: attestation.v1.AttestationService.SetReferenceValues:output_type -> attestation.v1.SetReferenceValuesResponse
+	7,  // 16: attestation.v1.AttestationService.GetReferenceValues:output_type -> attestation.v1.ReferenceValues
+	10, // 17: attestation.v1.AttestationService.Health:output_type -> attestation.v1.HealthResponse
+	12, // 18: attestation.v1.AttestationService.UpdateLatestVerdict:output_type -> attestation.v1.UpdateLatestVerdictResponse
+	14, // 19: attestation.v1.AttestationService.GetLatestVerdict:output_type -> attestation.v1.GetLatestVerdictResponse
+	16, // 20: attestation.v1.AttestationService.WatchVerdictUpdates:output_type -> attestation.v1.VerdictUpdate
+	14, // [14:21] is the sub-list for method output_type
+	7,  // [7:14] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
-func init() { file_v1_attestation_proto_init() }
-func file_v1_attestation_proto_init() {
-	if File_v1_attestation_proto != nil {
+func init() { file_attestationproto_v1_attestation_proto_init() }
+func file_attestationproto_v1_attestation_proto_init() {
+	if File_attestationproto_v1_attestation_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_attestation_proto_rawDesc), len(file_v1_attestation_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_attestationproto_v1_attestation_proto_rawDesc), len(file_attestationproto_v1_attestation_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   17,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_v1_attestation_proto_goTypes,
-		DependencyIndexes: file_v1_attestation_proto_depIdxs,
-		EnumInfos:         file_v1_attestation_proto_enumTypes,
-		MessageInfos:      file_v1_attestation_proto_msgTypes,
+		GoTypes:           file_attestationproto_v1_attestation_proto_goTypes,
+		DependencyIndexes: file_attestationproto_v1_attestation_proto_depIdxs,
+		EnumInfos:         file_attestationproto_v1_attestation_proto_enumTypes,
+		MessageInfos:      file_attestationproto_v1_attestation_proto_msgTypes,
 	}.Build()
-	File_v1_attestation_proto = out.File
-	file_v1_attestation_proto_goTypes = nil
-	file_v1_attestation_proto_depIdxs = nil
+	File_attestationproto_v1_attestation_proto = out.File
+	file_attestationproto_v1_attestation_proto_goTypes = nil
+	file_attestationproto_v1_attestation_proto_depIdxs = nil
 }

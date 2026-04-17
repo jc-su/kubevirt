@@ -9,17 +9,16 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: v1/trustd.proto
+// source: proto/v1/trustd.proto
 
 package trustdv1
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -83,11 +82,11 @@ func (x ContainerPhase) String() string {
 }
 
 func (ContainerPhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_trustd_proto_enumTypes[0].Descriptor()
+	return file_proto_v1_trustd_proto_enumTypes[0].Descriptor()
 }
 
 func (ContainerPhase) Type() protoreflect.EnumType {
-	return &file_v1_trustd_proto_enumTypes[0]
+	return &file_proto_v1_trustd_proto_enumTypes[0]
 }
 
 func (x ContainerPhase) Number() protoreflect.EnumNumber {
@@ -96,7 +95,7 @@ func (x ContainerPhase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ContainerPhase.Descriptor instead.
 func (ContainerPhase) EnumDescriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{0}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{0}
 }
 
 // EventType mirrors the kernel's IMA_CN_EVENT_* constants plus lifecycle events.
@@ -155,11 +154,11 @@ func (x EventType) String() string {
 }
 
 func (EventType) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_trustd_proto_enumTypes[1].Descriptor()
+	return file_proto_v1_trustd_proto_enumTypes[1].Descriptor()
 }
 
 func (EventType) Type() protoreflect.EnumType {
-	return &file_v1_trustd_proto_enumTypes[1]
+	return &file_proto_v1_trustd_proto_enumTypes[1]
 }
 
 func (x EventType) Number() protoreflect.EnumNumber {
@@ -168,7 +167,7 @@ func (x EventType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use EventType.Descriptor instead.
 func (EventType) EnumDescriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{1}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{1}
 }
 
 // RemediationMode controls how RestartContainer behaves for lifecycle-
@@ -207,11 +206,11 @@ func (x RemediationMode) String() string {
 }
 
 func (RemediationMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_trustd_proto_enumTypes[2].Descriptor()
+	return file_proto_v1_trustd_proto_enumTypes[2].Descriptor()
 }
 
 func (RemediationMode) Type() protoreflect.EnumType {
-	return &file_v1_trustd_proto_enumTypes[2]
+	return &file_proto_v1_trustd_proto_enumTypes[2]
 }
 
 func (x RemediationMode) Number() protoreflect.EnumNumber {
@@ -220,37 +219,50 @@ func (x RemediationMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RemediationMode.Descriptor instead.
 func (RemediationMode) EnumDescriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{2}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{2}
 }
 
-// AttestContainerRequest triggers attestation of a specific container.
-type AttestContainerRequest struct {
+// AttestWorkloadRequest triggers attestation for a workload identified
+// by its stable workload_id (= the container name registered at
+// StartContainer time). trustd looks up the current cgroup via the spec
+// store, reads the kernel's per-container event log, and bundles it
+// with a TD quote whose report_data binds the supplied nonce and
+// optional peer public key (for key-bound channel attestation).
+type AttestWorkloadRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Container identifier (cgroup path inside the CVM).
-	CgroupPath string `protobuf:"bytes,1,opt,name=cgroup_path,json=cgroupPath,proto3" json:"cgroup_path,omitempty"`
-	// Nonce from the verifier (hex-encoded). Binds attestation to challenge.
+	// Stable workload identity. Must match a container previously started
+	// via StartContainer. trustd will NOT produce evidence for an unknown
+	// workload_id (fail-closed).
+	WorkloadId string `protobuf:"bytes,1,opt,name=workload_id,json=workloadId,proto3" json:"workload_id,omitempty"`
+	// Verifier-chosen nonce (hex-encoded). Will be hashed into report_data
+	// to prevent quote replay.
 	NonceHex string `protobuf:"bytes,2,opt,name=nonce_hex,json=nonceHex,proto3" json:"nonce_hex,omitempty"`
-	// Whether to include a TD Quote in the response.
-	IncludeTdQuote bool `protobuf:"varint,3,opt,name=include_td_quote,json=includeTdQuote,proto3" json:"include_td_quote,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Optional: peer public key (raw bytes). When present, report_data is
+	// bound to this key as well, giving the evidence channel-binding
+	// semantics (the quote proves not just liveness but also "this evidence
+	// belongs to a peer that holds the private key for pk"). Empty bytes
+	// disable the binding (e.g., for a one-way attestation that just
+	// reports identity without opening a session).
+	PeerPk        []byte `protobuf:"bytes,3,opt,name=peer_pk,json=peerPk,proto3" json:"peer_pk,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AttestContainerRequest) Reset() {
-	*x = AttestContainerRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[0]
+func (x *AttestWorkloadRequest) Reset() {
+	*x = AttestWorkloadRequest{}
+	mi := &file_proto_v1_trustd_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AttestContainerRequest) String() string {
+func (x *AttestWorkloadRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AttestContainerRequest) ProtoMessage() {}
+func (*AttestWorkloadRequest) ProtoMessage() {}
 
-func (x *AttestContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[0]
+func (x *AttestWorkloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_v1_trustd_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -261,73 +273,85 @@ func (x *AttestContainerRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AttestContainerRequest.ProtoReflect.Descriptor instead.
-func (*AttestContainerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{0}
+// Deprecated: Use AttestWorkloadRequest.ProtoReflect.Descriptor instead.
+func (*AttestWorkloadRequest) Descriptor() ([]byte, []int) {
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *AttestContainerRequest) GetCgroupPath() string {
+func (x *AttestWorkloadRequest) GetWorkloadId() string {
 	if x != nil {
-		return x.CgroupPath
+		return x.WorkloadId
 	}
 	return ""
 }
 
-func (x *AttestContainerRequest) GetNonceHex() string {
+func (x *AttestWorkloadRequest) GetNonceHex() string {
 	if x != nil {
 		return x.NonceHex
 	}
 	return ""
 }
 
-func (x *AttestContainerRequest) GetIncludeTdQuote() bool {
+func (x *AttestWorkloadRequest) GetPeerPk() []byte {
 	if x != nil {
-		return x.IncludeTdQuote
+		return x.PeerPk
 	}
-	return false
+	return nil
 }
 
-// AttestContainerResponse contains the attestation evidence for one container.
-type AttestContainerResponse struct {
+// AttestWorkloadResponse bundles the evidence the verifier needs to
+// decide whether to trust this workload. The verifier:
+//  1. Verifies td_quote signature (e.g., via Intel DCAP).
+//  2. Checks td_quote's RTMR[2] against a known-good kernel reference
+//     value — this is what makes event_log_bytes trustworthy.
+//  3. Checks td_quote.report_data == SHA384(nonce) || SHA384(peer_pk)
+//     (or SHA384(nonce) || 0s if no peer_pk was supplied).
+//  4. Replays event_log_bytes against the reference measurement set
+//     for workload_id.
+type AttestWorkloadResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Container cgroup path.
-	CgroupPath string `protobuf:"bytes,1,opt,name=cgroup_path,json=cgroupPath,proto3" json:"cgroup_path,omitempty"`
-	// Current RTMR3 value (hex-encoded, 96 chars for SHA-384).
-	Rtmr3 string `protobuf:"bytes,2,opt,name=rtmr3,proto3" json:"rtmr3,omitempty"`
-	// Initial RTMR3 value at container creation (hex-encoded).
-	InitialRtmr3 string `protobuf:"bytes,3,opt,name=initial_rtmr3,json=initialRtmr3,proto3" json:"initial_rtmr3,omitempty"`
-	// Number of measurements extended into RTMR3.
-	MeasurementCount int64 `protobuf:"varint,4,opt,name=measurement_count,json=measurementCount,proto3" json:"measurement_count,omitempty"`
-	// Individual measurement log entries.
-	Measurements []*ContainerMeasurement `protobuf:"bytes,5,rep,name=measurements,proto3" json:"measurements,omitempty"`
-	// Reportdata = SHA384(nonce || rtmr3), hex-encoded.
-	ReportData string `protobuf:"bytes,6,opt,name=report_data,json=reportData,proto3" json:"report_data,omitempty"`
+	// Echo of the workload identity this evidence is for.
+	WorkloadId string `protobuf:"bytes,1,opt,name=workload_id,json=workloadId,proto3" json:"workload_id,omitempty"`
+	// Current cgroup path the workload resides in (for audit/trace only;
+	// not used for trust decisions).
+	CgroupPath string `protobuf:"bytes,2,opt,name=cgroup_path,json=cgroupPath,proto3" json:"cgroup_path,omitempty"`
 	// Nonce echo (hex-encoded).
-	Nonce string `protobuf:"bytes,7,opt,name=nonce,proto3" json:"nonce,omitempty"`
-	// Optional: TDX TD Quote (binary, base64-encoded).
-	// Only present if include_td_quote was true in the request.
-	TdQuote []byte `protobuf:"bytes,8,opt,name=td_quote,json=tdQuote,proto3" json:"td_quote,omitempty"`
+	NonceHex string `protobuf:"bytes,3,opt,name=nonce_hex,json=nonceHex,proto3" json:"nonce_hex,omitempty"`
+	// TDX TD Quote (raw bytes). Signed by Intel DCAP; contains RTMR[0..3]
+	// and report_data.
+	TdQuote []byte `protobuf:"bytes,4,opt,name=td_quote,json=tdQuote,proto3" json:"td_quote,omitempty"`
+	// Per-container event log bytes as published by the kernel at
+	// /sys/kernel/security/ima/container_rtmr/<mangled-cgroup>.
+	// Currently JSONL (one record per line). Verifier replays this
+	// against its reference baseline for workload_id.
+	EventLog []byte `protobuf:"bytes,5,opt,name=event_log,json=eventLog,proto3" json:"event_log,omitempty"`
+	// report_data that was used in TDX_GET_QUOTE:
+	//
+	//	report_data = SHA384(nonce) || (SHA384(peer_pk) if present else 0s)
+	//
+	// 64 bytes total, hex-encoded (128 chars).
+	ReportDataHex string `protobuf:"bytes,6,opt,name=report_data_hex,json=reportDataHex,proto3" json:"report_data_hex,omitempty"`
 	// Timestamp of the attestation (seconds since epoch).
-	Timestamp     int64 `protobuf:"varint,9,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Timestamp     int64 `protobuf:"varint,7,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AttestContainerResponse) Reset() {
-	*x = AttestContainerResponse{}
-	mi := &file_v1_trustd_proto_msgTypes[1]
+func (x *AttestWorkloadResponse) Reset() {
+	*x = AttestWorkloadResponse{}
+	mi := &file_proto_v1_trustd_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AttestContainerResponse) String() string {
+func (x *AttestWorkloadResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AttestContainerResponse) ProtoMessage() {}
+func (*AttestWorkloadResponse) ProtoMessage() {}
 
-func (x *AttestContainerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[1]
+func (x *AttestWorkloadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_v1_trustd_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -338,127 +362,58 @@ func (x *AttestContainerResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AttestContainerResponse.ProtoReflect.Descriptor instead.
-func (*AttestContainerResponse) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{1}
+// Deprecated: Use AttestWorkloadResponse.ProtoReflect.Descriptor instead.
+func (*AttestWorkloadResponse) Descriptor() ([]byte, []int) {
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *AttestContainerResponse) GetCgroupPath() string {
+func (x *AttestWorkloadResponse) GetWorkloadId() string {
+	if x != nil {
+		return x.WorkloadId
+	}
+	return ""
+}
+
+func (x *AttestWorkloadResponse) GetCgroupPath() string {
 	if x != nil {
 		return x.CgroupPath
 	}
 	return ""
 }
 
-func (x *AttestContainerResponse) GetRtmr3() string {
+func (x *AttestWorkloadResponse) GetNonceHex() string {
 	if x != nil {
-		return x.Rtmr3
+		return x.NonceHex
 	}
 	return ""
 }
 
-func (x *AttestContainerResponse) GetInitialRtmr3() string {
-	if x != nil {
-		return x.InitialRtmr3
-	}
-	return ""
-}
-
-func (x *AttestContainerResponse) GetMeasurementCount() int64 {
-	if x != nil {
-		return x.MeasurementCount
-	}
-	return 0
-}
-
-func (x *AttestContainerResponse) GetMeasurements() []*ContainerMeasurement {
-	if x != nil {
-		return x.Measurements
-	}
-	return nil
-}
-
-func (x *AttestContainerResponse) GetReportData() string {
-	if x != nil {
-		return x.ReportData
-	}
-	return ""
-}
-
-func (x *AttestContainerResponse) GetNonce() string {
-	if x != nil {
-		return x.Nonce
-	}
-	return ""
-}
-
-func (x *AttestContainerResponse) GetTdQuote() []byte {
+func (x *AttestWorkloadResponse) GetTdQuote() []byte {
 	if x != nil {
 		return x.TdQuote
 	}
 	return nil
 }
 
-func (x *AttestContainerResponse) GetTimestamp() int64 {
+func (x *AttestWorkloadResponse) GetEventLog() []byte {
+	if x != nil {
+		return x.EventLog
+	}
+	return nil
+}
+
+func (x *AttestWorkloadResponse) GetReportDataHex() string {
+	if x != nil {
+		return x.ReportDataHex
+	}
+	return ""
+}
+
+func (x *AttestWorkloadResponse) GetTimestamp() int64 {
 	if x != nil {
 		return x.Timestamp
 	}
 	return 0
-}
-
-// ContainerMeasurement represents a single file measurement.
-type ContainerMeasurement struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// SHA-384 digest of the measured file (hex-encoded).
-	Digest string `protobuf:"bytes,1,opt,name=digest,proto3" json:"digest,omitempty"`
-	// Path of the measured file.
-	File          string `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ContainerMeasurement) Reset() {
-	*x = ContainerMeasurement{}
-	mi := &file_v1_trustd_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ContainerMeasurement) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ContainerMeasurement) ProtoMessage() {}
-
-func (x *ContainerMeasurement) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ContainerMeasurement.ProtoReflect.Descriptor instead.
-func (*ContainerMeasurement) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ContainerMeasurement) GetDigest() string {
-	if x != nil {
-		return x.Digest
-	}
-	return ""
-}
-
-func (x *ContainerMeasurement) GetFile() string {
-	if x != nil {
-		return x.File
-	}
-	return ""
 }
 
 // ListContainersRequest lists all tracked containers.
@@ -470,7 +425,7 @@ type ListContainersRequest struct {
 
 func (x *ListContainersRequest) Reset() {
 	*x = ListContainersRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[3]
+	mi := &file_proto_v1_trustd_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -482,7 +437,7 @@ func (x *ListContainersRequest) String() string {
 func (*ListContainersRequest) ProtoMessage() {}
 
 func (x *ListContainersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[3]
+	mi := &file_proto_v1_trustd_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -495,7 +450,7 @@ func (x *ListContainersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListContainersRequest.ProtoReflect.Descriptor instead.
 func (*ListContainersRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{3}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{2}
 }
 
 // ListContainersResponse contains all tracked container states.
@@ -508,7 +463,7 @@ type ListContainersResponse struct {
 
 func (x *ListContainersResponse) Reset() {
 	*x = ListContainersResponse{}
-	mi := &file_v1_trustd_proto_msgTypes[4]
+	mi := &file_proto_v1_trustd_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -520,7 +475,7 @@ func (x *ListContainersResponse) String() string {
 func (*ListContainersResponse) ProtoMessage() {}
 
 func (x *ListContainersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[4]
+	mi := &file_proto_v1_trustd_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -533,7 +488,7 @@ func (x *ListContainersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListContainersResponse.ProtoReflect.Descriptor instead.
 func (*ListContainersResponse) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{4}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListContainersResponse) GetContainers() []*ContainerState {
@@ -553,7 +508,7 @@ type GetContainerStateRequest struct {
 
 func (x *GetContainerStateRequest) Reset() {
 	*x = GetContainerStateRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[5]
+	mi := &file_proto_v1_trustd_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -565,7 +520,7 @@ func (x *GetContainerStateRequest) String() string {
 func (*GetContainerStateRequest) ProtoMessage() {}
 
 func (x *GetContainerStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[5]
+	mi := &file_proto_v1_trustd_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -578,7 +533,7 @@ func (x *GetContainerStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetContainerStateRequest.ProtoReflect.Descriptor instead.
 func (*GetContainerStateRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{5}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetContainerStateRequest) GetCgroupPath() string {
@@ -608,7 +563,7 @@ type ContainerState struct {
 
 func (x *ContainerState) Reset() {
 	*x = ContainerState{}
-	mi := &file_v1_trustd_proto_msgTypes[6]
+	mi := &file_proto_v1_trustd_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -620,7 +575,7 @@ func (x *ContainerState) String() string {
 func (*ContainerState) ProtoMessage() {}
 
 func (x *ContainerState) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[6]
+	mi := &file_proto_v1_trustd_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -633,7 +588,7 @@ func (x *ContainerState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerState.ProtoReflect.Descriptor instead.
 func (*ContainerState) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{6}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ContainerState) GetCgroupPath() string {
@@ -719,7 +674,7 @@ type WatchEventsRequest struct {
 
 func (x *WatchEventsRequest) Reset() {
 	*x = WatchEventsRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[7]
+	mi := &file_proto_v1_trustd_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -731,7 +686,7 @@ func (x *WatchEventsRequest) String() string {
 func (*WatchEventsRequest) ProtoMessage() {}
 
 func (x *WatchEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[7]
+	mi := &file_proto_v1_trustd_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -744,7 +699,7 @@ func (x *WatchEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchEventsRequest.ProtoReflect.Descriptor instead.
 func (*WatchEventsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{7}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *WatchEventsRequest) GetEventTypes() []EventType {
@@ -784,7 +739,7 @@ type ContainerEvent struct {
 
 func (x *ContainerEvent) Reset() {
 	*x = ContainerEvent{}
-	mi := &file_v1_trustd_proto_msgTypes[8]
+	mi := &file_proto_v1_trustd_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -796,7 +751,7 @@ func (x *ContainerEvent) String() string {
 func (*ContainerEvent) ProtoMessage() {}
 
 func (x *ContainerEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[8]
+	mi := &file_proto_v1_trustd_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -809,7 +764,7 @@ func (x *ContainerEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerEvent.ProtoReflect.Descriptor instead.
 func (*ContainerEvent) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{8}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ContainerEvent) GetEventType() EventType {
@@ -893,7 +848,7 @@ type GetTDQuoteRequest struct {
 
 func (x *GetTDQuoteRequest) Reset() {
 	*x = GetTDQuoteRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[9]
+	mi := &file_proto_v1_trustd_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -905,7 +860,7 @@ func (x *GetTDQuoteRequest) String() string {
 func (*GetTDQuoteRequest) ProtoMessage() {}
 
 func (x *GetTDQuoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[9]
+	mi := &file_proto_v1_trustd_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -918,7 +873,7 @@ func (x *GetTDQuoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTDQuoteRequest.ProtoReflect.Descriptor instead.
 func (*GetTDQuoteRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{9}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetTDQuoteRequest) GetReportData() []byte {
@@ -939,7 +894,7 @@ type GetTDQuoteResponse struct {
 
 func (x *GetTDQuoteResponse) Reset() {
 	*x = GetTDQuoteResponse{}
-	mi := &file_v1_trustd_proto_msgTypes[10]
+	mi := &file_proto_v1_trustd_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -951,7 +906,7 @@ func (x *GetTDQuoteResponse) String() string {
 func (*GetTDQuoteResponse) ProtoMessage() {}
 
 func (x *GetTDQuoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[10]
+	mi := &file_proto_v1_trustd_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -964,7 +919,7 @@ func (x *GetTDQuoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTDQuoteResponse.ProtoReflect.Descriptor instead.
 func (*GetTDQuoteResponse) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{10}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetTDQuoteResponse) GetTdQuote() []byte {
@@ -983,7 +938,7 @@ type PingRequest struct {
 
 func (x *PingRequest) Reset() {
 	*x = PingRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[11]
+	mi := &file_proto_v1_trustd_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -995,7 +950,7 @@ func (x *PingRequest) String() string {
 func (*PingRequest) ProtoMessage() {}
 
 func (x *PingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[11]
+	mi := &file_proto_v1_trustd_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1008,7 +963,7 @@ func (x *PingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{11}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{10}
 }
 
 // PingResponse confirms the agent is alive.
@@ -1023,7 +978,7 @@ type PingResponse struct {
 
 func (x *PingResponse) Reset() {
 	*x = PingResponse{}
-	mi := &file_v1_trustd_proto_msgTypes[12]
+	mi := &file_proto_v1_trustd_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1035,7 +990,7 @@ func (x *PingResponse) String() string {
 func (*PingResponse) ProtoMessage() {}
 
 func (x *PingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[12]
+	mi := &file_proto_v1_trustd_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1048,7 +1003,7 @@ func (x *PingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingResponse.ProtoReflect.Descriptor instead.
 func (*PingResponse) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{12}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PingResponse) GetVersion() string {
@@ -1083,7 +1038,7 @@ type HeartbeatMonitorRequest struct {
 
 func (x *HeartbeatMonitorRequest) Reset() {
 	*x = HeartbeatMonitorRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[13]
+	mi := &file_proto_v1_trustd_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1095,7 +1050,7 @@ func (x *HeartbeatMonitorRequest) String() string {
 func (*HeartbeatMonitorRequest) ProtoMessage() {}
 
 func (x *HeartbeatMonitorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[13]
+	mi := &file_proto_v1_trustd_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1108,7 +1063,7 @@ func (x *HeartbeatMonitorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatMonitorRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatMonitorRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{13}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *HeartbeatMonitorRequest) GetCgroupPath() string {
@@ -1134,7 +1089,7 @@ type HeartbeatMonitorResponse struct {
 
 func (x *HeartbeatMonitorResponse) Reset() {
 	*x = HeartbeatMonitorResponse{}
-	mi := &file_v1_trustd_proto_msgTypes[14]
+	mi := &file_proto_v1_trustd_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1146,7 +1101,7 @@ func (x *HeartbeatMonitorResponse) String() string {
 func (*HeartbeatMonitorResponse) ProtoMessage() {}
 
 func (x *HeartbeatMonitorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[14]
+	mi := &file_proto_v1_trustd_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1159,7 +1114,7 @@ func (x *HeartbeatMonitorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatMonitorResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatMonitorResponse) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{14}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{13}
 }
 
 // HeartbeatMonitorStopRequest disables heartbeat monitoring.
@@ -1172,7 +1127,7 @@ type HeartbeatMonitorStopRequest struct {
 
 func (x *HeartbeatMonitorStopRequest) Reset() {
 	*x = HeartbeatMonitorStopRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[15]
+	mi := &file_proto_v1_trustd_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1184,7 +1139,7 @@ func (x *HeartbeatMonitorStopRequest) String() string {
 func (*HeartbeatMonitorStopRequest) ProtoMessage() {}
 
 func (x *HeartbeatMonitorStopRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[15]
+	mi := &file_proto_v1_trustd_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1197,7 +1152,7 @@ func (x *HeartbeatMonitorStopRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatMonitorStopRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatMonitorStopRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{15}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *HeartbeatMonitorStopRequest) GetCgroupPath() string {
@@ -1216,7 +1171,7 @@ type HeartbeatMonitorStopResponse struct {
 
 func (x *HeartbeatMonitorStopResponse) Reset() {
 	*x = HeartbeatMonitorStopResponse{}
-	mi := &file_v1_trustd_proto_msgTypes[16]
+	mi := &file_proto_v1_trustd_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1228,7 +1183,7 @@ func (x *HeartbeatMonitorStopResponse) String() string {
 func (*HeartbeatMonitorStopResponse) ProtoMessage() {}
 
 func (x *HeartbeatMonitorStopResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[16]
+	mi := &file_proto_v1_trustd_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1241,7 +1196,7 @@ func (x *HeartbeatMonitorStopResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatMonitorStopResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatMonitorStopResponse) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{16}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{15}
 }
 
 // HeartbeatReportRequest reports one liveness heartbeat for a container.
@@ -1254,7 +1209,7 @@ type HeartbeatReportRequest struct {
 
 func (x *HeartbeatReportRequest) Reset() {
 	*x = HeartbeatReportRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[17]
+	mi := &file_proto_v1_trustd_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1266,7 +1221,7 @@ func (x *HeartbeatReportRequest) String() string {
 func (*HeartbeatReportRequest) ProtoMessage() {}
 
 func (x *HeartbeatReportRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[17]
+	mi := &file_proto_v1_trustd_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1279,7 +1234,7 @@ func (x *HeartbeatReportRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatReportRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatReportRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{17}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *HeartbeatReportRequest) GetCgroupPath() string {
@@ -1298,7 +1253,7 @@ type HeartbeatReportResponse struct {
 
 func (x *HeartbeatReportResponse) Reset() {
 	*x = HeartbeatReportResponse{}
-	mi := &file_v1_trustd_proto_msgTypes[18]
+	mi := &file_proto_v1_trustd_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1310,7 +1265,7 @@ func (x *HeartbeatReportResponse) String() string {
 func (*HeartbeatReportResponse) ProtoMessage() {}
 
 func (x *HeartbeatReportResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[18]
+	mi := &file_proto_v1_trustd_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1323,7 +1278,7 @@ func (x *HeartbeatReportResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatReportResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatReportResponse) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{18}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{17}
 }
 
 type StartContainerRequest struct {
@@ -1341,7 +1296,7 @@ type StartContainerRequest struct {
 
 func (x *StartContainerRequest) Reset() {
 	*x = StartContainerRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[19]
+	mi := &file_proto_v1_trustd_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1353,7 +1308,7 @@ func (x *StartContainerRequest) String() string {
 func (*StartContainerRequest) ProtoMessage() {}
 
 func (x *StartContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[19]
+	mi := &file_proto_v1_trustd_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1366,7 +1321,7 @@ func (x *StartContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartContainerRequest.ProtoReflect.Descriptor instead.
 func (*StartContainerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{19}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *StartContainerRequest) GetName() string {
@@ -1431,7 +1386,7 @@ type StartContainerResponse struct {
 
 func (x *StartContainerResponse) Reset() {
 	*x = StartContainerResponse{}
-	mi := &file_v1_trustd_proto_msgTypes[20]
+	mi := &file_proto_v1_trustd_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1443,7 +1398,7 @@ func (x *StartContainerResponse) String() string {
 func (*StartContainerResponse) ProtoMessage() {}
 
 func (x *StartContainerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[20]
+	mi := &file_proto_v1_trustd_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1456,7 +1411,7 @@ func (x *StartContainerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartContainerResponse.ProtoReflect.Descriptor instead.
 func (*StartContainerResponse) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{20}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *StartContainerResponse) GetCgroupPath() string {
@@ -1505,7 +1460,7 @@ type StopContainerRequest struct {
 
 func (x *StopContainerRequest) Reset() {
 	*x = StopContainerRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[21]
+	mi := &file_proto_v1_trustd_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1517,7 +1472,7 @@ func (x *StopContainerRequest) String() string {
 func (*StopContainerRequest) ProtoMessage() {}
 
 func (x *StopContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[21]
+	mi := &file_proto_v1_trustd_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1530,7 +1485,7 @@ func (x *StopContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopContainerRequest.ProtoReflect.Descriptor instead.
 func (*StopContainerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{21}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *StopContainerRequest) GetName() string {
@@ -1564,7 +1519,7 @@ type StopContainerResponse struct {
 
 func (x *StopContainerResponse) Reset() {
 	*x = StopContainerResponse{}
-	mi := &file_v1_trustd_proto_msgTypes[22]
+	mi := &file_proto_v1_trustd_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1576,7 +1531,7 @@ func (x *StopContainerResponse) String() string {
 func (*StopContainerResponse) ProtoMessage() {}
 
 func (x *StopContainerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[22]
+	mi := &file_proto_v1_trustd_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1589,7 +1544,7 @@ func (x *StopContainerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopContainerResponse.ProtoReflect.Descriptor instead.
 func (*StopContainerResponse) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{22}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *StopContainerResponse) GetStopped() bool {
@@ -1614,7 +1569,7 @@ type ListRunningRequest struct {
 
 func (x *ListRunningRequest) Reset() {
 	*x = ListRunningRequest{}
-	mi := &file_v1_trustd_proto_msgTypes[23]
+	mi := &file_proto_v1_trustd_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1626,7 +1581,7 @@ func (x *ListRunningRequest) String() string {
 func (*ListRunningRequest) ProtoMessage() {}
 
 func (x *ListRunningRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[23]
+	mi := &file_proto_v1_trustd_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1639,7 +1594,7 @@ func (x *ListRunningRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRunningRequest.ProtoReflect.Descriptor instead.
 func (*ListRunningRequest) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{23}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{22}
 }
 
 type ListRunningResponse struct {
@@ -1651,7 +1606,7 @@ type ListRunningResponse struct {
 
 func (x *ListRunningResponse) Reset() {
 	*x = ListRunningResponse{}
-	mi := &file_v1_trustd_proto_msgTypes[24]
+	mi := &file_proto_v1_trustd_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1663,7 +1618,7 @@ func (x *ListRunningResponse) String() string {
 func (*ListRunningResponse) ProtoMessage() {}
 
 func (x *ListRunningResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[24]
+	mi := &file_proto_v1_trustd_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1676,7 +1631,7 @@ func (x *ListRunningResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRunningResponse.ProtoReflect.Descriptor instead.
 func (*ListRunningResponse) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{24}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListRunningResponse) GetContainers() []*ManagedContainer {
@@ -1702,7 +1657,7 @@ type ManagedContainer struct {
 
 func (x *ManagedContainer) Reset() {
 	*x = ManagedContainer{}
-	mi := &file_v1_trustd_proto_msgTypes[25]
+	mi := &file_proto_v1_trustd_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1714,7 +1669,7 @@ func (x *ManagedContainer) String() string {
 func (*ManagedContainer) ProtoMessage() {}
 
 func (x *ManagedContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_trustd_proto_msgTypes[25]
+	mi := &file_proto_v1_trustd_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1727,7 +1682,7 @@ func (x *ManagedContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedContainer.ProtoReflect.Descriptor instead.
 func (*ManagedContainer) Descriptor() ([]byte, []int) {
-	return file_v1_trustd_proto_rawDescGZIP(), []int{25}
+	return file_proto_v1_trustd_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ManagedContainer) GetName() string {
@@ -1779,31 +1734,26 @@ func (x *ManagedContainer) GetPorts() []int32 {
 	return nil
 }
 
-var File_v1_trustd_proto protoreflect.FileDescriptor
+var File_proto_v1_trustd_proto protoreflect.FileDescriptor
 
-const file_v1_trustd_proto_rawDesc = "" +
+const file_proto_v1_trustd_proto_rawDesc = "" +
 	"\n" +
-	"\x0fv1/trustd.proto\x12\ttrustd.v1\"\x80\x01\n" +
-	"\x16AttestContainerRequest\x12\x1f\n" +
-	"\vcgroup_path\x18\x01 \x01(\tR\n" +
+	"\x15proto/v1/trustd.proto\x12\ttrustd.v1\"n\n" +
+	"\x15AttestWorkloadRequest\x12\x1f\n" +
+	"\vworkload_id\x18\x01 \x01(\tR\n" +
+	"workloadId\x12\x1b\n" +
+	"\tnonce_hex\x18\x02 \x01(\tR\bnonceHex\x12\x17\n" +
+	"\apeer_pk\x18\x03 \x01(\fR\x06peerPk\"\xf5\x01\n" +
+	"\x16AttestWorkloadResponse\x12\x1f\n" +
+	"\vworkload_id\x18\x01 \x01(\tR\n" +
+	"workloadId\x12\x1f\n" +
+	"\vcgroup_path\x18\x02 \x01(\tR\n" +
 	"cgroupPath\x12\x1b\n" +
-	"\tnonce_hex\x18\x02 \x01(\tR\bnonceHex\x12(\n" +
-	"\x10include_td_quote\x18\x03 \x01(\bR\x0eincludeTdQuote\"\xd7\x02\n" +
-	"\x17AttestContainerResponse\x12\x1f\n" +
-	"\vcgroup_path\x18\x01 \x01(\tR\n" +
-	"cgroupPath\x12\x14\n" +
-	"\x05rtmr3\x18\x02 \x01(\tR\x05rtmr3\x12#\n" +
-	"\rinitial_rtmr3\x18\x03 \x01(\tR\finitialRtmr3\x12+\n" +
-	"\x11measurement_count\x18\x04 \x01(\x03R\x10measurementCount\x12C\n" +
-	"\fmeasurements\x18\x05 \x03(\v2\x1f.trustd.v1.ContainerMeasurementR\fmeasurements\x12\x1f\n" +
-	"\vreport_data\x18\x06 \x01(\tR\n" +
-	"reportData\x12\x14\n" +
-	"\x05nonce\x18\a \x01(\tR\x05nonce\x12\x19\n" +
-	"\btd_quote\x18\b \x01(\fR\atdQuote\x12\x1c\n" +
-	"\ttimestamp\x18\t \x01(\x03R\ttimestamp\"B\n" +
-	"\x14ContainerMeasurement\x12\x16\n" +
-	"\x06digest\x18\x01 \x01(\tR\x06digest\x12\x12\n" +
-	"\x04file\x18\x02 \x01(\tR\x04file\"\x17\n" +
+	"\tnonce_hex\x18\x03 \x01(\tR\bnonceHex\x12\x19\n" +
+	"\btd_quote\x18\x04 \x01(\fR\atdQuote\x12\x1b\n" +
+	"\tevent_log\x18\x05 \x01(\fR\beventLog\x12&\n" +
+	"\x0freport_data_hex\x18\x06 \x01(\tR\rreportDataHex\x12\x1c\n" +
+	"\ttimestamp\x18\a \x01(\x03R\ttimestamp\"\x17\n" +
 	"\x15ListContainersRequest\"S\n" +
 	"\x16ListContainersResponse\x129\n" +
 	"\n" +
@@ -1932,9 +1882,8 @@ const file_v1_trustd_proto_rawDesc = "" +
 	"\x0fRemediationMode\x12\x1b\n" +
 	"\x17REMEDIATION_MODE_SIGNAL\x10\x00\x12\x1d\n" +
 	"\x19REMEDIATION_MODE_RECREATE\x10\x01\x12\x19\n" +
-	"\x15REMEDIATION_MODE_KILL\x10\x022\xe2\b\n" +
-	"\x06Trustd\x12X\n" +
-	"\x0fAttestContainer\x12!.trustd.v1.AttestContainerRequest\x1a\".trustd.v1.AttestContainerResponse\x12U\n" +
+	"\x15REMEDIATION_MODE_KILL\x10\x022\xdf\b\n" +
+	"\x06Trustd\x12U\n" +
 	"\x0eListContainers\x12 .trustd.v1.ListContainersRequest\x1a!.trustd.v1.ListContainersResponse\x12S\n" +
 	"\x11GetContainerState\x12#.trustd.v1.GetContainerStateRequest\x1a\x19.trustd.v1.ContainerState\x12R\n" +
 	"\x14WatchContainerEvents\x12\x1d.trustd.v1.WatchEventsRequest\x1a\x19.trustd.v1.ContainerEvent0\x01\x12I\n" +
@@ -1947,119 +1896,118 @@ const file_v1_trustd_proto_rawDesc = "" +
 	"\x10RestartContainer\x12#.trustd.v1.GetContainerStateRequest\x1a\x19.trustd.v1.ContainerState\x12U\n" +
 	"\x0eStartContainer\x12 .trustd.v1.StartContainerRequest\x1a!.trustd.v1.StartContainerResponse\x12R\n" +
 	"\rStopContainer\x12\x1f.trustd.v1.StopContainerRequest\x1a .trustd.v1.StopContainerResponse\x12V\n" +
-	"\x15ListRunningContainers\x12\x1d.trustd.v1.ListRunningRequest\x1a\x1e.trustd.v1.ListRunningResponseB@Z>kubevirt.io/kubevirt/pkg/virt-handler/trustd/proto/v1;trustdv1b\x06proto3"
+	"\x15ListRunningContainers\x12\x1d.trustd.v1.ListRunningRequest\x1a\x1e.trustd.v1.ListRunningResponse\x12U\n" +
+	"\x0eAttestWorkload\x12 .trustd.v1.AttestWorkloadRequest\x1a!.trustd.v1.AttestWorkloadResponseB@Z>kubevirt.io/kubevirt/pkg/virt-handler/trustd/proto/v1;trustdv1b\x06proto3"
 
 var (
-	file_v1_trustd_proto_rawDescOnce sync.Once
-	file_v1_trustd_proto_rawDescData []byte
+	file_proto_v1_trustd_proto_rawDescOnce sync.Once
+	file_proto_v1_trustd_proto_rawDescData []byte
 )
 
-func file_v1_trustd_proto_rawDescGZIP() []byte {
-	file_v1_trustd_proto_rawDescOnce.Do(func() {
-		file_v1_trustd_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v1_trustd_proto_rawDesc), len(file_v1_trustd_proto_rawDesc)))
+func file_proto_v1_trustd_proto_rawDescGZIP() []byte {
+	file_proto_v1_trustd_proto_rawDescOnce.Do(func() {
+		file_proto_v1_trustd_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_v1_trustd_proto_rawDesc), len(file_proto_v1_trustd_proto_rawDesc)))
 	})
-	return file_v1_trustd_proto_rawDescData
+	return file_proto_v1_trustd_proto_rawDescData
 }
 
-var file_v1_trustd_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_v1_trustd_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
-var file_v1_trustd_proto_goTypes = []any{
+var file_proto_v1_trustd_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_proto_v1_trustd_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_proto_v1_trustd_proto_goTypes = []any{
 	(ContainerPhase)(0),                  // 0: trustd.v1.ContainerPhase
 	(EventType)(0),                       // 1: trustd.v1.EventType
 	(RemediationMode)(0),                 // 2: trustd.v1.RemediationMode
-	(*AttestContainerRequest)(nil),       // 3: trustd.v1.AttestContainerRequest
-	(*AttestContainerResponse)(nil),      // 4: trustd.v1.AttestContainerResponse
-	(*ContainerMeasurement)(nil),         // 5: trustd.v1.ContainerMeasurement
-	(*ListContainersRequest)(nil),        // 6: trustd.v1.ListContainersRequest
-	(*ListContainersResponse)(nil),       // 7: trustd.v1.ListContainersResponse
-	(*GetContainerStateRequest)(nil),     // 8: trustd.v1.GetContainerStateRequest
-	(*ContainerState)(nil),               // 9: trustd.v1.ContainerState
-	(*WatchEventsRequest)(nil),           // 10: trustd.v1.WatchEventsRequest
-	(*ContainerEvent)(nil),               // 11: trustd.v1.ContainerEvent
-	(*GetTDQuoteRequest)(nil),            // 12: trustd.v1.GetTDQuoteRequest
-	(*GetTDQuoteResponse)(nil),           // 13: trustd.v1.GetTDQuoteResponse
-	(*PingRequest)(nil),                  // 14: trustd.v1.PingRequest
-	(*PingResponse)(nil),                 // 15: trustd.v1.PingResponse
-	(*HeartbeatMonitorRequest)(nil),      // 16: trustd.v1.HeartbeatMonitorRequest
-	(*HeartbeatMonitorResponse)(nil),     // 17: trustd.v1.HeartbeatMonitorResponse
-	(*HeartbeatMonitorStopRequest)(nil),  // 18: trustd.v1.HeartbeatMonitorStopRequest
-	(*HeartbeatMonitorStopResponse)(nil), // 19: trustd.v1.HeartbeatMonitorStopResponse
-	(*HeartbeatReportRequest)(nil),       // 20: trustd.v1.HeartbeatReportRequest
-	(*HeartbeatReportResponse)(nil),      // 21: trustd.v1.HeartbeatReportResponse
-	(*StartContainerRequest)(nil),        // 22: trustd.v1.StartContainerRequest
-	(*StartContainerResponse)(nil),       // 23: trustd.v1.StartContainerResponse
-	(*StopContainerRequest)(nil),         // 24: trustd.v1.StopContainerRequest
-	(*StopContainerResponse)(nil),        // 25: trustd.v1.StopContainerResponse
-	(*ListRunningRequest)(nil),           // 26: trustd.v1.ListRunningRequest
-	(*ListRunningResponse)(nil),          // 27: trustd.v1.ListRunningResponse
-	(*ManagedContainer)(nil),             // 28: trustd.v1.ManagedContainer
-	nil,                                  // 29: trustd.v1.StartContainerRequest.LabelsEntry
+	(*AttestWorkloadRequest)(nil),        // 3: trustd.v1.AttestWorkloadRequest
+	(*AttestWorkloadResponse)(nil),       // 4: trustd.v1.AttestWorkloadResponse
+	(*ListContainersRequest)(nil),        // 5: trustd.v1.ListContainersRequest
+	(*ListContainersResponse)(nil),       // 6: trustd.v1.ListContainersResponse
+	(*GetContainerStateRequest)(nil),     // 7: trustd.v1.GetContainerStateRequest
+	(*ContainerState)(nil),               // 8: trustd.v1.ContainerState
+	(*WatchEventsRequest)(nil),           // 9: trustd.v1.WatchEventsRequest
+	(*ContainerEvent)(nil),               // 10: trustd.v1.ContainerEvent
+	(*GetTDQuoteRequest)(nil),            // 11: trustd.v1.GetTDQuoteRequest
+	(*GetTDQuoteResponse)(nil),           // 12: trustd.v1.GetTDQuoteResponse
+	(*PingRequest)(nil),                  // 13: trustd.v1.PingRequest
+	(*PingResponse)(nil),                 // 14: trustd.v1.PingResponse
+	(*HeartbeatMonitorRequest)(nil),      // 15: trustd.v1.HeartbeatMonitorRequest
+	(*HeartbeatMonitorResponse)(nil),     // 16: trustd.v1.HeartbeatMonitorResponse
+	(*HeartbeatMonitorStopRequest)(nil),  // 17: trustd.v1.HeartbeatMonitorStopRequest
+	(*HeartbeatMonitorStopResponse)(nil), // 18: trustd.v1.HeartbeatMonitorStopResponse
+	(*HeartbeatReportRequest)(nil),       // 19: trustd.v1.HeartbeatReportRequest
+	(*HeartbeatReportResponse)(nil),      // 20: trustd.v1.HeartbeatReportResponse
+	(*StartContainerRequest)(nil),        // 21: trustd.v1.StartContainerRequest
+	(*StartContainerResponse)(nil),       // 22: trustd.v1.StartContainerResponse
+	(*StopContainerRequest)(nil),         // 23: trustd.v1.StopContainerRequest
+	(*StopContainerResponse)(nil),        // 24: trustd.v1.StopContainerResponse
+	(*ListRunningRequest)(nil),           // 25: trustd.v1.ListRunningRequest
+	(*ListRunningResponse)(nil),          // 26: trustd.v1.ListRunningResponse
+	(*ManagedContainer)(nil),             // 27: trustd.v1.ManagedContainer
+	nil,                                  // 28: trustd.v1.StartContainerRequest.LabelsEntry
 }
-var file_v1_trustd_proto_depIdxs = []int32{
-	5,  // 0: trustd.v1.AttestContainerResponse.measurements:type_name -> trustd.v1.ContainerMeasurement
-	9,  // 1: trustd.v1.ListContainersResponse.containers:type_name -> trustd.v1.ContainerState
-	0,  // 2: trustd.v1.ContainerState.phase:type_name -> trustd.v1.ContainerPhase
-	1,  // 3: trustd.v1.WatchEventsRequest.event_types:type_name -> trustd.v1.EventType
-	1,  // 4: trustd.v1.ContainerEvent.event_type:type_name -> trustd.v1.EventType
-	0,  // 5: trustd.v1.ContainerEvent.phase:type_name -> trustd.v1.ContainerPhase
-	29, // 6: trustd.v1.StartContainerRequest.labels:type_name -> trustd.v1.StartContainerRequest.LabelsEntry
-	0,  // 7: trustd.v1.StartContainerResponse.phase:type_name -> trustd.v1.ContainerPhase
-	28, // 8: trustd.v1.ListRunningResponse.containers:type_name -> trustd.v1.ManagedContainer
-	0,  // 9: trustd.v1.ManagedContainer.phase:type_name -> trustd.v1.ContainerPhase
-	3,  // 10: trustd.v1.Trustd.AttestContainer:input_type -> trustd.v1.AttestContainerRequest
-	6,  // 11: trustd.v1.Trustd.ListContainers:input_type -> trustd.v1.ListContainersRequest
-	8,  // 12: trustd.v1.Trustd.GetContainerState:input_type -> trustd.v1.GetContainerStateRequest
-	10, // 13: trustd.v1.Trustd.WatchContainerEvents:input_type -> trustd.v1.WatchEventsRequest
-	12, // 14: trustd.v1.Trustd.GetTDQuote:input_type -> trustd.v1.GetTDQuoteRequest
-	14, // 15: trustd.v1.Trustd.Ping:input_type -> trustd.v1.PingRequest
-	16, // 16: trustd.v1.Trustd.StartHeartbeatMonitor:input_type -> trustd.v1.HeartbeatMonitorRequest
-	18, // 17: trustd.v1.Trustd.StopHeartbeatMonitor:input_type -> trustd.v1.HeartbeatMonitorStopRequest
-	20, // 18: trustd.v1.Trustd.ReportHeartbeat:input_type -> trustd.v1.HeartbeatReportRequest
-	8,  // 19: trustd.v1.Trustd.RestartContainer:input_type -> trustd.v1.GetContainerStateRequest
-	22, // 20: trustd.v1.Trustd.StartContainer:input_type -> trustd.v1.StartContainerRequest
-	24, // 21: trustd.v1.Trustd.StopContainer:input_type -> trustd.v1.StopContainerRequest
-	26, // 22: trustd.v1.Trustd.ListRunningContainers:input_type -> trustd.v1.ListRunningRequest
-	4,  // 23: trustd.v1.Trustd.AttestContainer:output_type -> trustd.v1.AttestContainerResponse
-	7,  // 24: trustd.v1.Trustd.ListContainers:output_type -> trustd.v1.ListContainersResponse
-	9,  // 25: trustd.v1.Trustd.GetContainerState:output_type -> trustd.v1.ContainerState
-	11, // 26: trustd.v1.Trustd.WatchContainerEvents:output_type -> trustd.v1.ContainerEvent
-	13, // 27: trustd.v1.Trustd.GetTDQuote:output_type -> trustd.v1.GetTDQuoteResponse
-	15, // 28: trustd.v1.Trustd.Ping:output_type -> trustd.v1.PingResponse
-	17, // 29: trustd.v1.Trustd.StartHeartbeatMonitor:output_type -> trustd.v1.HeartbeatMonitorResponse
-	19, // 30: trustd.v1.Trustd.StopHeartbeatMonitor:output_type -> trustd.v1.HeartbeatMonitorStopResponse
-	21, // 31: trustd.v1.Trustd.ReportHeartbeat:output_type -> trustd.v1.HeartbeatReportResponse
-	9,  // 32: trustd.v1.Trustd.RestartContainer:output_type -> trustd.v1.ContainerState
-	23, // 33: trustd.v1.Trustd.StartContainer:output_type -> trustd.v1.StartContainerResponse
-	25, // 34: trustd.v1.Trustd.StopContainer:output_type -> trustd.v1.StopContainerResponse
-	27, // 35: trustd.v1.Trustd.ListRunningContainers:output_type -> trustd.v1.ListRunningResponse
-	23, // [23:36] is the sub-list for method output_type
-	10, // [10:23] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+var file_proto_v1_trustd_proto_depIdxs = []int32{
+	8,  // 0: trustd.v1.ListContainersResponse.containers:type_name -> trustd.v1.ContainerState
+	0,  // 1: trustd.v1.ContainerState.phase:type_name -> trustd.v1.ContainerPhase
+	1,  // 2: trustd.v1.WatchEventsRequest.event_types:type_name -> trustd.v1.EventType
+	1,  // 3: trustd.v1.ContainerEvent.event_type:type_name -> trustd.v1.EventType
+	0,  // 4: trustd.v1.ContainerEvent.phase:type_name -> trustd.v1.ContainerPhase
+	28, // 5: trustd.v1.StartContainerRequest.labels:type_name -> trustd.v1.StartContainerRequest.LabelsEntry
+	0,  // 6: trustd.v1.StartContainerResponse.phase:type_name -> trustd.v1.ContainerPhase
+	27, // 7: trustd.v1.ListRunningResponse.containers:type_name -> trustd.v1.ManagedContainer
+	0,  // 8: trustd.v1.ManagedContainer.phase:type_name -> trustd.v1.ContainerPhase
+	5,  // 9: trustd.v1.Trustd.ListContainers:input_type -> trustd.v1.ListContainersRequest
+	7,  // 10: trustd.v1.Trustd.GetContainerState:input_type -> trustd.v1.GetContainerStateRequest
+	9,  // 11: trustd.v1.Trustd.WatchContainerEvents:input_type -> trustd.v1.WatchEventsRequest
+	11, // 12: trustd.v1.Trustd.GetTDQuote:input_type -> trustd.v1.GetTDQuoteRequest
+	13, // 13: trustd.v1.Trustd.Ping:input_type -> trustd.v1.PingRequest
+	15, // 14: trustd.v1.Trustd.StartHeartbeatMonitor:input_type -> trustd.v1.HeartbeatMonitorRequest
+	17, // 15: trustd.v1.Trustd.StopHeartbeatMonitor:input_type -> trustd.v1.HeartbeatMonitorStopRequest
+	19, // 16: trustd.v1.Trustd.ReportHeartbeat:input_type -> trustd.v1.HeartbeatReportRequest
+	7,  // 17: trustd.v1.Trustd.RestartContainer:input_type -> trustd.v1.GetContainerStateRequest
+	21, // 18: trustd.v1.Trustd.StartContainer:input_type -> trustd.v1.StartContainerRequest
+	23, // 19: trustd.v1.Trustd.StopContainer:input_type -> trustd.v1.StopContainerRequest
+	25, // 20: trustd.v1.Trustd.ListRunningContainers:input_type -> trustd.v1.ListRunningRequest
+	3,  // 21: trustd.v1.Trustd.AttestWorkload:input_type -> trustd.v1.AttestWorkloadRequest
+	6,  // 22: trustd.v1.Trustd.ListContainers:output_type -> trustd.v1.ListContainersResponse
+	8,  // 23: trustd.v1.Trustd.GetContainerState:output_type -> trustd.v1.ContainerState
+	10, // 24: trustd.v1.Trustd.WatchContainerEvents:output_type -> trustd.v1.ContainerEvent
+	12, // 25: trustd.v1.Trustd.GetTDQuote:output_type -> trustd.v1.GetTDQuoteResponse
+	14, // 26: trustd.v1.Trustd.Ping:output_type -> trustd.v1.PingResponse
+	16, // 27: trustd.v1.Trustd.StartHeartbeatMonitor:output_type -> trustd.v1.HeartbeatMonitorResponse
+	18, // 28: trustd.v1.Trustd.StopHeartbeatMonitor:output_type -> trustd.v1.HeartbeatMonitorStopResponse
+	20, // 29: trustd.v1.Trustd.ReportHeartbeat:output_type -> trustd.v1.HeartbeatReportResponse
+	8,  // 30: trustd.v1.Trustd.RestartContainer:output_type -> trustd.v1.ContainerState
+	22, // 31: trustd.v1.Trustd.StartContainer:output_type -> trustd.v1.StartContainerResponse
+	24, // 32: trustd.v1.Trustd.StopContainer:output_type -> trustd.v1.StopContainerResponse
+	26, // 33: trustd.v1.Trustd.ListRunningContainers:output_type -> trustd.v1.ListRunningResponse
+	4,  // 34: trustd.v1.Trustd.AttestWorkload:output_type -> trustd.v1.AttestWorkloadResponse
+	22, // [22:35] is the sub-list for method output_type
+	9,  // [9:22] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
-func init() { file_v1_trustd_proto_init() }
-func file_v1_trustd_proto_init() {
-	if File_v1_trustd_proto != nil {
+func init() { file_proto_v1_trustd_proto_init() }
+func file_proto_v1_trustd_proto_init() {
+	if File_proto_v1_trustd_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_trustd_proto_rawDesc), len(file_v1_trustd_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_v1_trustd_proto_rawDesc), len(file_proto_v1_trustd_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   27,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_v1_trustd_proto_goTypes,
-		DependencyIndexes: file_v1_trustd_proto_depIdxs,
-		EnumInfos:         file_v1_trustd_proto_enumTypes,
-		MessageInfos:      file_v1_trustd_proto_msgTypes,
+		GoTypes:           file_proto_v1_trustd_proto_goTypes,
+		DependencyIndexes: file_proto_v1_trustd_proto_depIdxs,
+		EnumInfos:         file_proto_v1_trustd_proto_enumTypes,
+		MessageInfos:      file_proto_v1_trustd_proto_msgTypes,
 	}.Build()
-	File_v1_trustd_proto = out.File
-	file_v1_trustd_proto_goTypes = nil
-	file_v1_trustd_proto_depIdxs = nil
+	File_proto_v1_trustd_proto = out.File
+	file_proto_v1_trustd_proto_goTypes = nil
+	file_proto_v1_trustd_proto_depIdxs = nil
 }

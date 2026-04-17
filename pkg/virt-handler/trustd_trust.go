@@ -38,30 +38,63 @@ import (
 	trustd "kubevirt.io/kubevirt/pkg/virt-handler/trustd"
 )
 
-// cvmTrustManager manages trustd connections and trust state collectors
-// for TDX VMIs that have container attestation enabled.
+// cvmTrustManager keeps one trustd client connection per TDX VMI and runs
+// a canonical drift subscriber on each. The subscriber's job is to react
+// to trustd-published PhaseChange events (Trusted → Untrusted, produced by
+// trustd's in-guest drift detector) and call trustd.RestartContainer for
+// the configured RemediationAction.
+//
+// Host-side verdict reporting (ContainerTrustStates on VMI.Status) now
+// comes from attestation-service.WatchVerdictUpdates, not from a polling
+// collector. That wiring is orthogonal and lives outside this manager.
 type cvmTrustManager struct {
-	mu                sync.RWMutex
-	collectors        map[string]*trustd.TrustStateCollector // key: vmi.UID
-	clients           map[string]*trustd.Client              // key: vmi.UID
-	verifier          trustd.AttestationVerifier
-	remediationPolicy trustd.RemediationPolicy
+	mu       sync.RWMutex
+	clients  map[string]*trustd.Client          // key: vmi.UID
+	cancels  map[string]context.CancelFunc      // key: vmi.UID — cancels drift subscriber
+	policy   cvmDriftPolicy
+	cooldown time.Duration
 	// Track which container specs have been delivered to avoid re-sending
 	// on every reconcile tick. Key: vmi.UID, value: set of container names.
 	deliveredSpecs map[string]map[string]bool
+	// Per-VMI list of workload_ids for the attestation verdict mirror
+	// (VMI.Status.ContainerTrustStates is built from this).
+	workloadIDs map[string][]string
+
+	// One process-wide attestation-service verdict subscriber. nil when
+	// TRUSTFNCALL_ATTESTATION_SERVICE_ADDR is unset — the drift subscriber
+	// still enforces without it, but VMI.Status.ContainerTrustStates stays
+	// empty.
+	asClient    *trustd.ASClient
+	mirror      *trustd.VerdictMirror
+	mirrorCtx   context.Context
+	mirrorStop  context.CancelFunc
+}
+
+// cvmDriftPolicy is a static RemediationAction applied on every Untrusted
+// transition. Distinct values for Untrusted vs Stale let operators be
+// strict about drift but lenient about stale TCB collateral, which is a
+// normal production distinction.
+type cvmDriftPolicy struct {
+	OnUntrusted trustd.RemediationAction
+	OnStale     trustd.RemediationAction
+}
+
+// ActionFor implements trustd.PolicyLookup. The event log drift detector
+// in trustd only publishes Untrusted transitions today (Stale is an AS-side
+// verdict for expired quote collateral, pushed via UpdateLatestVerdict),
+// so we map Untrusted here. The Stale path is reserved for a future AS
+// subscriber that pushes Stale verdicts into the DriftSubscriber loop.
+func (p cvmDriftPolicy) ActionFor(_ context.Context, _, _ string) trustd.RemediationAction {
+	return p.OnUntrusted
 }
 
 // cvmTrustdNeeded decides whether virt-handler should maintain a trustd
-// vsock collector + container-lifecycle loop for this VMI. Two independent
-// reasons can require it:
-//   1. TDX attestation is requested → need the collector for RTMR events.
+// vsock connection + drift subscriber for this VMI.
+//
+//   1. TDX attestation is requested → need drift enforcement.
 //   2. The VMI carries a trustd.ContainerSpecAnnotation → trustd is the
 //      *delivery channel* for container specs, even on non-TDX VMIs
 //      (used for cold-start benchmarking where attestation is off-path).
-//
-// Gating only on attestation would break the second case, so we OR the two
-// signals. The collector itself is cheap when there are no RTMR events to
-// collect — it's just an idle vsock connection.
 func cvmTrustdNeeded(vmi *v1.VirtualMachineInstance) bool {
 	if util.IsTDXAttestationRequested(vmi) {
 		return true
@@ -74,18 +107,36 @@ func cvmTrustdNeeded(vmi *v1.VirtualMachineInstance) bool {
 }
 
 func newCVMTrustManager() *cvmTrustManager {
-	return &cvmTrustManager{
-		collectors:        make(map[string]*trustd.TrustStateCollector),
-		clients:           make(map[string]*trustd.Client),
-		deliveredSpecs:    make(map[string]map[string]bool),
-		verifier:          newAttestationVerifierFromEnv(),
-		remediationPolicy: remediationPolicyFromEnv(),
+	policy, cooldown := remediationPolicyFromEnv()
+	m := &cvmTrustManager{
+		clients:        make(map[string]*trustd.Client),
+		cancels:        make(map[string]context.CancelFunc),
+		deliveredSpecs: make(map[string]map[string]bool),
+		workloadIDs:    make(map[string][]string),
+		policy:         policy,
+		cooldown:       cooldown,
 	}
+
+	// Best-effort: spin up the verdict mirror subscriber. Missing env =
+	// mirror disabled (silent no-op). Connection errors are non-fatal —
+	// drift enforcement via trustd still works without the authority.
+	asClient, err := trustd.NewASClientFromEnv()
+	if err != nil {
+		log.DefaultLogger().Warningf("attestation-service client init failed; VMI trust states will be empty: %v", err)
+	} else if asClient != nil {
+		m.asClient = asClient
+		m.mirror = trustd.NewVerdictMirror()
+		m.mirrorCtx, m.mirrorStop = context.WithCancel(context.Background())
+		// Empty `subjects` = watch all verdicts; we filter per VMI on read.
+		go m.mirror.Run(m.mirrorCtx, asClient, nil)
+		log.DefaultLogger().Info("verdict mirror subscriber started")
+	}
+	return m
 }
 
-// ensureCollector creates and starts a collector for a VMI if needed.
-// Returns true if trustd is connected.
-func (m *cvmTrustManager) ensureCollector(vmi *v1.VirtualMachineInstance, verifier trustd.AttestationVerifier) bool {
+// ensureClient opens a trustd client for the VMI if needed and launches
+// the drift subscriber. Returns true once trustd is reachable.
+func (m *cvmTrustManager) ensureClient(vmi *v1.VirtualMachineInstance) bool {
 	if !cvmTrustdNeeded(vmi) {
 		return false
 	}
@@ -93,29 +144,24 @@ func (m *cvmTrustManager) ensureCollector(vmi *v1.VirtualMachineInstance, verifi
 		return false
 	}
 	if vmi.Status.VSOCKCID == nil {
-		log.DefaultLogger().V(5).Object(vmi).Info("TDX attestation requested but no VSOCK CID allocated yet")
+		log.DefaultLogger().V(5).Object(vmi).Info("trustd needed but no VSOCK CID allocated yet")
 		return false
 	}
 
 	uid := string(vmi.UID)
 	m.mu.RLock()
-	_, exists := m.collectors[uid]
 	existingClient := m.clients[uid]
+	_, hasCancel := m.cancels[uid]
 	m.mu.RUnlock()
 
-	if exists {
-		if existingClient != nil && existingClient.IsReachable() {
-			return true
-		}
-		log.DefaultLogger().V(4).Object(vmi).Info("trustd collector exists but is not reachable; recreating")
-		m.stopCollector(vmi)
+	if existingClient != nil && existingClient.IsReachable() && hasCancel {
+		return true
+	}
+	if existingClient != nil {
+		log.DefaultLogger().V(4).Object(vmi).Info("trustd client exists but is not reachable; recreating")
+		m.stopClient(vmi)
 	}
 
-	// Create client and check reachability. trustd usually comes up within
-	// a few seconds of VMI Running, but kubelet resync is coarse and a
-	// single failed reachability check would leave the VMI waiting minutes
-	// for the next reconcile. Retry for up to ~30s so cold-start isn't
-	// gated by the reconcile period.
 	client := trustd.NewClient(*vmi.Status.VSOCKCID)
 	if !client.IsReachable() {
 		reachable := false
@@ -132,57 +178,58 @@ func (m *cvmTrustManager) ensureCollector(vmi *v1.VirtualMachineInstance, verifi
 		}
 	}
 
-	// Get attestation/heartbeat intervals from spec.
-	var attestationInterval *int32
-	var heartbeatInterval *int32
-	if vmi.Spec.Domain.LaunchSecurity != nil &&
-		vmi.Spec.Domain.LaunchSecurity.TDX != nil &&
-		vmi.Spec.Domain.LaunchSecurity.TDX.Attestation != nil {
-		attestationInterval = vmi.Spec.Domain.LaunchSecurity.TDX.Attestation.AttestationIntervalSeconds
-		heartbeatInterval = vmi.Spec.Domain.LaunchSecurity.TDX.Attestation.HeartbeatIntervalSeconds
-	}
-
-	collector := trustd.NewTrustStateCollector(client, verifier, attestationInterval, heartbeatInterval, m.remediationPolicy)
-	collector.Start()
+	ctx, cancel := context.WithCancel(context.Background())
+	subscriber := trustd.NewDriftSubscriber(client, m.policy, m.cooldown)
+	go func() {
+		for {
+			if err := subscriber.Run(ctx); err != nil && ctx.Err() == nil {
+				log.DefaultLogger().Object(vmi).Warningf("drift subscriber disconnected (will retry): %v", err)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			return
+		}
+	}()
 
 	m.mu.Lock()
-	m.collectors[uid] = collector
 	m.clients[uid] = client
+	m.cancels[uid] = cancel
 	m.mu.Unlock()
 
-	log.DefaultLogger().Object(vmi).Info("Started trustd state collector")
+	log.DefaultLogger().Object(vmi).Infof("Started trustd drift subscriber (policy=%s)", m.policy.OnUntrusted)
 	return true
 }
 
-// stopCollector stops and removes the collector for a VMI.
-func (m *cvmTrustManager) stopCollector(vmi *v1.VirtualMachineInstance) {
+// stopClient cancels the drift subscriber and drops the trustd client.
+func (m *cvmTrustManager) stopClient(vmi *v1.VirtualMachineInstance) {
 	uid := string(vmi.UID)
 	m.mu.Lock()
-	collector, exists := m.collectors[uid]
-	if exists {
-		delete(m.collectors, uid)
-		delete(m.clients, uid)
-		delete(m.deliveredSpecs, uid)
-	}
+	cancel, hadCancel := m.cancels[uid]
+	delete(m.cancels, uid)
+	delete(m.clients, uid)
+	delete(m.deliveredSpecs, uid)
+	delete(m.workloadIDs, uid)
 	m.mu.Unlock()
-
-	if exists {
-		collector.Stop()
-		log.DefaultLogger().Object(vmi).Info("Stopped trustd state collector")
+	if hadCancel {
+		cancel()
+		log.DefaultLogger().Object(vmi).Info("Stopped trustd drift subscriber")
 	}
 }
 
-// getStates returns the latest trust states for a VMI.
+// getStates returns mirrored trust states for the VMI's workloads, or
+// nil when the verdict mirror is disabled (no AS endpoint configured).
 func (m *cvmTrustManager) getStates(vmi *v1.VirtualMachineInstance) []v1.ContainerTrustState {
-	uid := string(vmi.UID)
-	m.mu.RLock()
-	collector, exists := m.collectors[uid]
-	m.mu.RUnlock()
-
-	if !exists {
+	if m.mirror == nil {
 		return nil
 	}
-	return collector.GetStates()
+	uid := string(vmi.UID)
+	m.mu.RLock()
+	ids := append([]string(nil), m.workloadIDs[uid]...)
+	m.mu.RUnlock()
+	if len(ids) == 0 {
+		return nil
+	}
+	return m.mirror.States(ids)
 }
 
 // getClient returns the trustd client for a VMI, or nil if not connected.
@@ -218,6 +265,15 @@ func (m *cvmTrustManager) deliverContainerSpecs(vmi *v1.VirtualMachineInstance) 
 		m.deliveredSpecs[uid] = make(map[string]bool)
 	}
 	delivered := m.deliveredSpecs[uid]
+	// Update the per-VMI workload_id list so the verdict mirror knows
+	// which subjects to report for this VMI.
+	ids := make([]string, 0, len(specs))
+	for _, s := range specs {
+		if s.Name != "" {
+			ids = append(ids, s.Name)
+		}
+	}
+	m.workloadIDs[uid] = ids
 	m.mu.Unlock()
 
 	ctx := context.Background()
@@ -245,42 +301,53 @@ func (m *cvmTrustManager) deliverContainerSpecs(vmi *v1.VirtualMachineInstance) 
 	}
 }
 
-// stopAll stops all collectors. Called during controller shutdown.
+// stopAll cancels every drift subscriber and drops every client. Called
+// during controller shutdown.
 func (m *cvmTrustManager) stopAll() {
 	m.mu.Lock()
-	collectors := make(map[string]*trustd.TrustStateCollector, len(m.collectors))
-	for k, v := range m.collectors {
-		collectors[k] = v
+	cancels := make([]context.CancelFunc, 0, len(m.cancels))
+	for _, c := range m.cancels {
+		cancels = append(cancels, c)
 	}
-	m.collectors = make(map[string]*trustd.TrustStateCollector)
 	m.clients = make(map[string]*trustd.Client)
+	m.cancels = make(map[string]context.CancelFunc)
+	m.workloadIDs = make(map[string][]string)
 	m.mu.Unlock()
 
-	for _, collector := range collectors {
-		collector.Stop()
+	for _, cancel := range cancels {
+		cancel()
+	}
+	if m.mirrorStop != nil {
+		m.mirrorStop()
+	}
+	if m.asClient != nil {
+		_ = m.asClient.Close()
 	}
 }
 
-// updateCVMTrustConditions updates the CVMAgentConnected and ContainersTrusted
-// conditions on a VMI based on the current collector state.
+// updateCVMTrustConditions updates the CVMAgentConnected condition on a
+// VMI based on the current trustd client connectivity.
+//
+// The ContainersTrusted condition previously computed from a polling
+// collector is intentionally not set here. After the AttestWorkload /
+// VerifyWorkload migration, host-side verdict aggregation belongs to
+// attestation-service.WatchVerdictUpdates; a separate subscriber should
+// mirror those verdicts onto vmi.Status.ContainerTrustStates. Until that
+// mirror exists, the condition stays absent (rather than lying).
 func updateCVMTrustConditions(vmi *v1.VirtualMachineInstance, trustMgr *cvmTrustManager, condManager *controller.VirtualMachineInstanceConditionManager) {
 	if !cvmTrustdNeeded(vmi) || !vmi.IsRunning() || vmi.IsFinal() || vmi.IsMarkedForDeletion() {
-		trustMgr.stopCollector(vmi)
+		trustMgr.stopClient(vmi)
 		vmi.Status.ContainerTrustStates = nil
 		condManager.RemoveCondition(vmi, v1.VirtualMachineInstanceCVMAgentConnected)
 		condManager.RemoveCondition(vmi, v1.VirtualMachineInstanceContainersTrusted)
 		return
 	}
 
-	connected := trustMgr.ensureCollector(vmi, trustMgr.verifier)
-
-	// Once connected, deliver any container specs from the VMI annotation
-	// that haven't been sent yet. This replaces the cloud-init runcmd path.
+	connected := trustMgr.ensureClient(vmi)
 	if connected {
 		trustMgr.deliverContainerSpecs(vmi)
 	}
 
-	// Update CVMAgentConnected condition
 	if connected && !condManager.HasCondition(vmi, v1.VirtualMachineInstanceCVMAgentConnected) {
 		vmi.Status.Conditions = append(vmi.Status.Conditions, v1.VirtualMachineInstanceCondition{
 			Type:          v1.VirtualMachineInstanceCVMAgentConnected,
@@ -291,11 +358,13 @@ func updateCVMTrustConditions(vmi *v1.VirtualMachineInstance, trustMgr *cvmTrust
 		condManager.RemoveCondition(vmi, v1.VirtualMachineInstanceCVMAgentConnected)
 	}
 
-	// Update trust states on VMI status
+	// Mirror attestation verdicts onto VMI.Status.ContainerTrustStates and
+	// derive the ContainersTrusted condition from them. When the verdict
+	// mirror is disabled (no AS endpoint configured), states stays nil and
+	// the condition is removed — we report nothing rather than lying.
 	states := trustMgr.getStates(vmi)
 	vmi.Status.ContainerTrustStates = states
-
-	// Update ContainersTrusted condition based on verdicts
+	condManager.RemoveCondition(vmi, v1.VirtualMachineInstanceContainersTrusted)
 	if len(states) > 0 {
 		allTrusted := true
 		for _, s := range states {
@@ -304,7 +373,6 @@ func updateCVMTrustConditions(vmi *v1.VirtualMachineInstance, trustMgr *cvmTrust
 				break
 			}
 		}
-		condManager.RemoveCondition(vmi, v1.VirtualMachineInstanceContainersTrusted)
 		status := k8sv1.ConditionFalse
 		if allTrusted {
 			status = k8sv1.ConditionTrue
@@ -314,32 +382,21 @@ func updateCVMTrustConditions(vmi *v1.VirtualMachineInstance, trustMgr *cvmTrust
 			LastProbeTime: metav1.Now(),
 			Status:        status,
 		})
-	} else {
-		condManager.RemoveCondition(vmi, v1.VirtualMachineInstanceContainersTrusted)
 	}
 }
 
 const (
-	attestationServiceAddrEnv = "TRUSTFNCALL_ATTESTATION_SERVICE_ADDR"
-	remediateOnUntrustedEnv   = "TRUSTFNCALL_REMEDIATE_ON_UNTRUSTED"
-	remediateOnStaleEnv       = "TRUSTFNCALL_REMEDIATE_ON_STALE"
-	remediationCooldownEnv    = "TRUSTFNCALL_REMEDIATION_COOLDOWN_SECONDS"
+	remediateOnUntrustedEnv = "TRUSTFNCALL_REMEDIATE_ON_UNTRUSTED"
+	remediateOnStaleEnv     = "TRUSTFNCALL_REMEDIATE_ON_STALE"
+	remediationCooldownEnv  = "TRUSTFNCALL_REMEDIATION_COOLDOWN_SECONDS"
 )
 
-func newAttestationVerifierFromEnv() trustd.AttestationVerifier {
-	address := strings.TrimSpace(os.Getenv(attestationServiceAddrEnv))
-	if address == "" {
-		return nil
+func remediationPolicyFromEnv() (cvmDriftPolicy, time.Duration) {
+	policy := cvmDriftPolicy{
+		OnUntrusted: parseRemediationAction(os.Getenv(remediateOnUntrustedEnv)),
+		OnStale:     parseRemediationAction(os.Getenv(remediateOnStaleEnv)),
 	}
-	log.DefaultLogger().Infof("Using attestation verifier at %s", address)
-	return trustd.NewRemoteAttestationVerifier(address)
-}
-
-func remediationPolicyFromEnv() trustd.RemediationPolicy {
-	policy := trustd.DefaultRemediationPolicy()
-	policy.OnUntrusted = parseRemediationAction(os.Getenv(remediateOnUntrustedEnv))
-	policy.OnStale = parseRemediationAction(os.Getenv(remediateOnStaleEnv))
-
+	cooldown := 60 * time.Second
 	if raw := strings.TrimSpace(os.Getenv(remediationCooldownEnv)); raw != "" {
 		seconds, err := strconv.Atoi(raw)
 		if err != nil || seconds <= 0 {
@@ -349,7 +406,7 @@ func remediationPolicyFromEnv() trustd.RemediationPolicy {
 				raw,
 			)
 		} else {
-			policy.Cooldown = time.Duration(seconds) * time.Second
+			cooldown = time.Duration(seconds) * time.Second
 		}
 	}
 
@@ -358,11 +415,11 @@ func remediationPolicyFromEnv() trustd.RemediationPolicy {
 			"Container remediation enabled (on_untrusted=%s, on_stale=%s, cooldown=%s)",
 			policy.OnUntrusted,
 			policy.OnStale,
-			policy.Cooldown,
+			cooldown,
 		)
 	}
 
-	return policy
+	return policy, cooldown
 }
 
 func parseRemediationAction(raw string) trustd.RemediationAction {

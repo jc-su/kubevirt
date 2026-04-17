@@ -67,34 +67,6 @@ func (app *SubresourceAPIApp) TDXContainerListHandler(request *restful.Request, 
 	app.httpGetRequestHandler(request, response, validate, getURL, v1.TDXContainerListInfo{})
 }
 
-// TDXContainerAttestHandler triggers attestation of a specific container inside a TDX CVM.
-func (app *SubresourceAPIApp) TDXContainerAttestHandler(request *restful.Request, response *restful.Response) {
-	if !app.ensureContainerAttestationEnabled(response) {
-		return
-	}
-
-	if request.Request.Body == nil {
-		writeError(errors.NewBadRequest("Request body required: specify containerID to attest"), response)
-		return
-	}
-
-	validate := func(vmi *v1.VirtualMachineInstance) *errors.StatusError {
-		if !vmi.IsRunning() {
-			return errors.NewConflict(v1.Resource("virtualmachineinstance"), vmi.Name, fmt.Errorf(vmiNotRunning))
-		}
-		if !kutil.IsTDXAttestationRequested(vmi) {
-			return errors.NewConflict(v1.Resource("virtualmachineinstance"), vmi.Name, fmt.Errorf(tdxNoAttestationErr))
-		}
-		return nil
-	}
-
-	getURL := func(vmi *v1.VirtualMachineInstance, conn kubecli.VirtHandlerConn) (string, error) {
-		return conn.TDXContainerAttestURI(vmi)
-	}
-
-	app.putRequestHandler(request, response, validate, getURL, false)
-}
-
 // TDXTrustStatesHandler returns the ContainerTrustStates from the VMI status.
 // This is a convenience endpoint that reads directly from the VMI status
 // rather than proxying to virt-handler.
