@@ -1023,13 +1023,21 @@ func Convert_v1_VirtualMachineInstance_To_api_Domain(vmi *v1.VirtualMachineInsta
 		isMemfdRequired = true
 	}
 
-	// TDX VMs require anonymous memory with private access mode
+	// TDX VMs require KVM's guest_memfd-backed private memory. libvirt
+	// emits this for source type=memfd + access mode=private (translated
+	// to `-object memory-backend-memfd,guest_memfd=on` on QEMU ≥ 8.2).
+	// The previous "anonymous/private" setting translated to plain
+	// `memory-backend-ram`, which triggers a WARN in the TDX TDP MMU
+	// page-fault path (tdp_mmu_set_spte_atomic) the first time KVM tries
+	// to pre-fault the guest, after which QEMU aborts with
+	// "KVM_GET_CLOCK failed: Input/output error".
 	if c.UseLaunchSecurityTDX {
 		if domain.Spec.MemoryBacking == nil {
 			domain.Spec.MemoryBacking = &api.MemoryBacking{}
 		}
-		domain.Spec.MemoryBacking.Source = &api.MemoryBackingSource{Type: "anonymous"}
+		domain.Spec.MemoryBacking.Source = &api.MemoryBackingSource{Type: "memfd"}
 		domain.Spec.MemoryBacking.Access = &api.MemoryBackingAccess{Mode: "private"}
+		isMemfdRequired = true
 	}
 
 	if isMemfdRequired {

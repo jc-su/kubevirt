@@ -51,7 +51,7 @@ var _ = Describe("TrustController", func() {
 				Domain: v1.DomainSpec{
 					LaunchSecurity: &v1.LaunchSecurity{
 						TDX: &v1.TDX{
-							Attestation: &v1.TDXAttestation{
+							Attestation: &v1.TDXContainerAttestation{
 								Enabled: true,
 							},
 						},

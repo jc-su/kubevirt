@@ -269,7 +269,19 @@ func (dpi *SocketDevicePlugin) healthCheck() error {
 	}
 	defer watcher.Close()
 
-	deviceDir := filepath.Join(dpi.socketRoot, dpi.socketDir)
+	// /var/run is a symlink to /run on most distros, and /proc/<pid>/root
+	// follows absolute symlink targets relative to the CURRENT process's
+	// root rather than pid's root. Rewriting /var/run → /run before the
+	// join avoids fsnotify returning ENOENT on a dir that actually exists
+	// on the host. Matches the same normalization device_controller does
+	// before deciding whether to register this plugin.
+	normalizedDir := dpi.socketDir
+	if strings.HasPrefix(normalizedDir, "/var/run/") {
+		normalizedDir = "/run/" + strings.TrimPrefix(normalizedDir, "/var/run/")
+	} else if normalizedDir == "/var/run" {
+		normalizedDir = "/run"
+	}
+	deviceDir := filepath.Join(dpi.socketRoot, normalizedDir)
 	devicePath := filepath.Join(deviceDir, dpi.socket)
 
 	// Start watching the files before we check for their existence to avoid races

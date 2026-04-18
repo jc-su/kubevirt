@@ -2883,7 +2883,7 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 		Context("with TDX container attestation", func() {
 			BeforeEach(func() {
 				enableFeatureGates(featuregate.WorkloadEncryptionTDX, featuregate.VSOCKGate, featuregate.ContainerAttestation)
-				vmi.Spec.Domain.LaunchSecurity.TDX.Attestation = &v1.TDXAttestation{
+				vmi.Spec.Domain.LaunchSecurity.TDX.Attestation = &v1.TDXContainerAttestation{
 					Enabled: true,
 				}
 				vmi.Spec.Domain.Devices.AutoattachVSOCK = pointer.P(true)

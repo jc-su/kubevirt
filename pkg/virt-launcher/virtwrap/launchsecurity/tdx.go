@@ -24,11 +24,24 @@ import (
 )
 
 const (
-	// TDXPolicyNoDebug is the TDX policy value that disables debugging.
-	// Bit 0: NoDebug (set), Bit 28: TDX-specific marker.
-	TDXPolicyNoDebug = "0x10000001"
-	// TDXPolicyDebug is the TDX policy value that allows debugging (bit 0 clear).
-	TDXPolicyDebug = "0x10000000"
+	// Per Intel TDX Module spec, the 64-bit ATTRIBUTES field in the TD's
+	// TDREPORT is a bitmask. Two bits matter here:
+	//   bit  0 (0x1)          DEBUG           — set ⇒ TD is a debug TD
+	//   bit 28 (0x10000000)   SEPT_VE_DISABLE — set ⇒ guest does not fault on
+	//                         Secure-EPT violations (required for modern
+	//                         Linux TDX guests; KVM rejects TDs without it
+	//                         on most production platforms)
+	//
+	// Production TDs (noDebug=true) MUST leave bit 0 clear; debug TDs set
+	// it. SEPT_VE_DISABLE is set in both cases.
+	//
+	// The previous definitions here had the two values swapped — which
+	// caused `launchSecurity.tdx.policy.noDebug: true` to actually request
+	// a debug TD, and QEMU aborted with
+	// "Invalid attributes 0x10000001 for TDX VM (KVM supported: 0x10000000)"
+	// on hosts whose TDX module denies debug creation.
+	TDXPolicyNoDebug = "0x10000000"
+	TDXPolicyDebug   = "0x10000001"
 )
 
 // TDXPolicyFromSpec computes the TDX policy string from the API spec.

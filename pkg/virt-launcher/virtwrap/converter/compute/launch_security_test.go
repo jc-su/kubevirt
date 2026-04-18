@@ -82,7 +82,7 @@ var _ = Describe("LaunchSecurity Domain Configurator", func() {
 					QuoteGenerationService: &api.QGS{
 						Path: QGSTestSocketPath,
 					},
-					Policy: "0x10000001",
+					Policy: "0x10000000",
 				},
 			},
 		}

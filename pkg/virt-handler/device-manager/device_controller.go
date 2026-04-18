@@ -20,6 +20,7 @@
 package device_manager
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -38,6 +39,7 @@ import (
 	"kubevirt.io/client-go/log"
 
 	"kubevirt.io/kubevirt/pkg/storage/reservation"
+	"kubevirt.io/kubevirt/pkg/util"
 	virtconfig "kubevirt.io/kubevirt/pkg/virt-config"
 	"kubevirt.io/kubevirt/pkg/virt-handler/selinux"
 )
@@ -186,22 +188,57 @@ func (c *DeviceController) updateTdxDevice() (Device, error) {
 	maxTDXVMs, err := cgroup.GetMiscCapacity("tdx")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get TDX capacity from misc.capacity: %v", err)
-	} else if maxTDXVMs > 0 {
-		var selinuxExecutor selinux.SELinuxExecutor
-		socketPath := c.virtConfig.GetQGSSocketPath()
-		socketDir := path.Dir(socketPath)
-		socketFile := path.Base(socketPath)
-		var tdxPlugin Device
-		var err error
-		if c.virtConfig.RequireQGS() {
-			tdxPlugin, err = NewSocketDevicePlugin(services.TdxDeviceName, socketDir, socketFile, maxTDXVMs, selinuxExecutor, nil, true)
-		} else {
-			tdxPlugin = NewOptionalSocketDevicePlugin(services.TdxDeviceName, socketDir, socketFile, maxTDXVMs, selinuxExecutor, nil, true)
-		}
-		return tdxPlugin, err
-	} else {
+	}
+	if maxTDXVMs <= 0 {
 		return nil, fmt.Errorf("an invalid device capacity of %d was report for tdx", maxTDXVMs)
 	}
+
+	// The QGS device plugin watches the parent directory of the QGS socket
+	// and registers a per-TD capacity with kubelet. Registering it on a node
+	// where QGS hasn't been deployed (no socket directory present) makes the
+	// fsnotify watcher fail, which sends the controller's retry loop into a
+	// ListAndWatch crash-loop with a close-of-closed-channel panic. Gate on
+	// "is QGS actually deployed here" instead of "does the kernel expose
+	// TDX capacity" — the two aren't the same thing. Operators using
+	// in-guest attestation (e.g. trustd) don't need QGS and shouldn't have
+	// to stand up a dummy socket to keep virt-handler healthy.
+	socketPath := c.virtConfig.GetQGSSocketPath()
+	socketDir := path.Dir(socketPath)
+	if socketPath == "" {
+		log.Log.V(2).Infof("TDX hardware present but no QGS socket configured; skipping QGS device plugin registration")
+		return nil, nil
+	}
+	// The plugin watches deviceDir from the host's root via /proc/1/root/
+	// (see socket_device.go: useHostRootMount=true). Check existence the
+	// same way. One wrinkle: on most distros /var/run is a symlink to /run,
+	// and /proc/<pid>/root follows absolute symlink targets against the
+	// container's current root, not pid 1's — so /proc/1/root/var/run/x
+	// can 404 even though /proc/1/root/run/x exists. Normalize the common
+	// /var/run → /run rewrite before stat so the guard matches reality.
+	hostViewDir := socketDir
+	if strings.HasPrefix(hostViewDir, "/var/run/") {
+		hostViewDir = "/run/" + strings.TrimPrefix(hostViewDir, "/var/run/")
+	} else if hostViewDir == "/var/run" {
+		hostViewDir = "/run"
+	}
+	hostView := path.Join(util.HostRootMount, hostViewDir)
+	if _, statErr := os.Stat(hostView); statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) {
+			log.Log.V(2).Infof("TDX hardware present but host QGS socket dir %s does not exist; skipping QGS device plugin registration (deploy QGS or create the dir to enable)", socketDir)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("stat QGS socket dir %s: %v", hostView, statErr)
+	}
+
+	var selinuxExecutor selinux.SELinuxExecutor
+	socketFile := path.Base(socketPath)
+	var tdxPlugin Device
+	if c.virtConfig.RequireQGS() {
+		tdxPlugin, err = NewSocketDevicePlugin(services.TdxDeviceName, socketDir, socketFile, maxTDXVMs, selinuxExecutor, nil, true)
+	} else {
+		tdxPlugin = NewOptionalSocketDevicePlugin(services.TdxDeviceName, socketDir, socketFile, maxTDXVMs, selinuxExecutor, nil, true)
+	}
+	return tdxPlugin, err
 }
 
 // updatePermittedHostDevicePlugins returns a slice of device plugins for permitted devices which are present on the node
@@ -212,9 +249,10 @@ func (c *DeviceController) updatePermittedHostDevicePlugins() []Device {
 		tdxPlugin, err := c.updateTdxDevice()
 		if err != nil {
 			log.Log.Reason(err).Errorf("failed to configure the TDX-QGS device plugin")
-		} else {
+		} else if tdxPlugin != nil {
 			permittedDevices = append(permittedDevices, tdxPlugin)
 		}
+		// tdxPlugin == nil + err == nil: QGS not deployed on this node → skip.
 	}
 
 	var featureGatedGenericDevices = []struct {

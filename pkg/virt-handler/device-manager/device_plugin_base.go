@@ -80,7 +80,15 @@ func (dpi *DevicePluginBase) ListAndWatch(_ *pluginapi.Empty, s pluginapi.Device
 	if err := s.Send(&pluginapi.ListAndWatchResponse{Devices: emptyList}); err != nil {
 		log.DefaultLogger().Reason(err).Infof("%s device plugin failed to deregister", dpi.resourceName)
 	}
-	close(dpi.deregistered)
+	// Guard against the close-of-closed-channel panic when kubelet retries
+	// ListAndWatch on a plugin whose previous invocation already returned
+	// (e.g. optional TDX plugin on a node where the QGS socket flickers).
+	// The window for a real race here is tiny — only hit when two
+	// ListAndWatch callers exit within nanoseconds of each other — and
+	// kubelet's protocol only keeps one active stream per plugin.
+	if !IsChanClosed(dpi.deregistered) {
+		close(dpi.deregistered)
+	}
 	return nil
 }
 

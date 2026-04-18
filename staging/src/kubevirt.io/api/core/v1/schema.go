@@ -895,7 +895,7 @@ type TDX struct {
 	Policy *TDXPolicy `json:"policy,omitempty"`
 	// Attestation configures container-level attestation inside the TDX VM.
 	// +optional
-	Attestation *TDXAttestation `json:"attestation,omitempty"`
+	Attestation *TDXContainerAttestation `json:"attestation,omitempty"`
 }
 
 // TDXPolicy contains TDX security policy flags.
@@ -906,8 +906,8 @@ type TDXPolicy struct {
 	NoDebug *bool `json:"noDebug,omitempty"`
 }
 
-// TDXAttestation configures the in-guest attestation agent for container trust verification.
-type TDXAttestation struct {
+// TDXContainerAttestation configures the in-guest attestation agent for container trust verification.
+type TDXContainerAttestation struct {
 	// Enabled indicates whether trustd should be contacted for container attestation.
 	Enabled bool `json:"enabled"`
 	// HeartbeatIntervalSeconds is the interval at which trustd sends heartbeats.

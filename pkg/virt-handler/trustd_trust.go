@@ -49,8 +49,8 @@ import (
 // collector. That wiring is orthogonal and lives outside this manager.
 type cvmTrustManager struct {
 	mu       sync.RWMutex
-	clients  map[string]*trustd.Client          // key: vmi.UID
-	cancels  map[string]context.CancelFunc      // key: vmi.UID — cancels drift subscriber
+	clients  map[string]*trustd.Client     // key: vmi.UID
+	cancels  map[string]context.CancelFunc // key: vmi.UID — cancels drift subscriber
 	policy   cvmDriftPolicy
 	cooldown time.Duration
 	// Track which container specs have been delivered to avoid re-sending
@@ -64,10 +64,10 @@ type cvmTrustManager struct {
 	// TRUSTFNCALL_ATTESTATION_SERVICE_ADDR is unset — the drift subscriber
 	// still enforces without it, but VMI.Status.ContainerTrustStates stays
 	// empty.
-	asClient    *trustd.ASClient
-	mirror      *trustd.VerdictMirror
-	mirrorCtx   context.Context
-	mirrorStop  context.CancelFunc
+	asClient   *trustd.ASClient
+	mirror     *trustd.VerdictMirror
+	mirrorCtx  context.Context
+	mirrorStop context.CancelFunc
 }
 
 // cvmDriftPolicy is a static RemediationAction applied on every Untrusted
@@ -91,10 +91,10 @@ func (p cvmDriftPolicy) ActionFor(_ context.Context, _, _ string) trustd.Remedia
 // cvmTrustdNeeded decides whether virt-handler should maintain a trustd
 // vsock connection + drift subscriber for this VMI.
 //
-//   1. TDX attestation is requested → need drift enforcement.
-//   2. The VMI carries a trustd.ContainerSpecAnnotation → trustd is the
-//      *delivery channel* for container specs, even on non-TDX VMIs
-//      (used for cold-start benchmarking where attestation is off-path).
+//  1. TDX attestation is requested → need drift enforcement.
+//  2. The VMI carries a trustd.ContainerSpecAnnotation → trustd is the
+//     *delivery channel* for container specs, even on non-TDX VMIs
+//     (used for cold-start benchmarking where attestation is off-path).
 func cvmTrustdNeeded(vmi *v1.VirtualMachineInstance) bool {
 	if util.IsTDXAttestationRequested(vmi) {
 		return true
