@@ -346,6 +346,29 @@ oci_pull(
     image = "gcr.io/distroless/base-debian12",
 )
 
+# TDX-enabled launcher base: Ubuntu 25.04 (plucky) + qemu-system-x86
+# 9.2.1+tdx2.0~ppa2 + libvirt 11.0.0-2ubuntu6+tdx2.0~ppa1 from the
+# kobuk-team TDX PPA. Used as the x86_64 base for virt-launcher so
+# the launcher's QEMU is binary-compatible with the Ubuntu TDX host
+# kernel's KVM ABI. See images/virt-launcher-ubuntu/Dockerfile.
+oci_pull(
+    name = "tdx_launcher_base",
+    # Image pushed via `docker buildx build --provenance=false --sbom=false`
+    # so the registry holds a plain docker v2 manifest (no OCI index with
+    # attestation sub-manifests). rules_oci's downloader sends an Accept
+    # header listing manifest v2 / OCI manifest v1, and the registry
+    # responds 200 with the single-arch manifest at this digest. Images
+    # pushed with default buildx options produce an OCI index that
+    # rules_oci 2.0.1 handles correctly only when the index is present at
+    # the queried digest; attestation-adorned indexes tripped 404s on
+    # manifest lookup here.
+    digest = "sha256:abcd4a04de7b8997a1aa28533a7fc97f58e82fe6ebd0e919ba58c54f688cdf0c",
+    # http:// prefix → rules_oci's parse_image sets scheme=http, bypassing
+    # the default HTTPS fetch that SSL-aborts against our plain-HTTP local
+    # registry at localhost:5000.
+    image = "http://localhost:5000/kubevirt/virt-launcher-base-ubuntu",
+)
+
 oci_pull(
     name = "go_image_base_aarch64",
     digest = "sha256:092d065d29d72957dc7a85519c3f911d6ad233fe6b53e7a9f42891e6464cc7d9",

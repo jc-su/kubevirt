@@ -1,0 +1,114 @@
+# Final virt-launcher image: Ubuntu TDX base + patched virt-launcher binary
+# + libvirt-admin shim + missing-lib compat symlinks.
+#
+# The launcher binary was compiled on CentOS Stream 10 and dynamically
+# links against el9 library SONAMEs; Ubuntu 25.04 ships the equivalent
+# libraries at slightly different SONAMEs/versions. This image carries
+# the fixes needed to run that binary on the Ubuntu TDX runtime without
+# rebuilding launcher from scratch.
+# Pin to the bazel-built launcher output by digest, not :devel, because
+# this image overwrites :devel on push — self-referential FROMs would
+# cherry-pick stale files from an earlier shim build. The digest is
+# injected by build-launcher-shim.sh (which captures it from the bazel
+# push step). When running `docker build` directly, override with
+# --build-arg SOURCE_LAUNCHER_IMAGE=...@sha256:...
+ARG SOURCE_LAUNCHER_IMAGE
+FROM ${SOURCE_LAUNCHER_IMAGE} AS el9base
+
+FROM localhost:5000/kubevirt/virt-launcher-base-ubuntu:tdx-plucky
+
+# 1. Install libraries the el9 launcher links against; the Ubuntu packages
+#    don't always match SONAMEs 1:1, so compat symlinks follow.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends --allow-downgrades \
+        libpcre3 \
+        libnbd0 \
+        libsasl2-2 \
+        libunistring5 \
+        libcrypt1; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+# 2. SONAME compat symlinks. Ubuntu→el9:
+#      libsasl2.so.3    → libsasl2.so.2     (sasl 2.1.28 either side; no ABI delta we care about)
+#      libunistring.so.2 → libunistring.so.5 (stable symbols)
+#      libcrypt.so.2    → libcrypt.so.1     (glibc-crypt subset; fine for virt-launcher usage)
+RUN set -eux; \
+    cd /usr/lib/x86_64-linux-gnu; \
+    ln -sf libsasl2.so.2     libsasl2.so.3; \
+    ln -sf libunistring.so.5 libunistring.so.2; \
+    ln -sf libcrypt.so.1     libcrypt.so.2; \
+    ln -sf libpcre.so.3      libpcre.so.1; \
+    # kubevirt hardcodes the RHEL OVMF dir (/usr/share/OVMF) and expects
+    # OVMF.inteltdx.fd for TDX domains. Ubuntu 25.04 ships the TDX-merged
+    # firmware at /usr/share/ovmf/OVMF.fd (note the case + filename diff).
+    # Symlink the RHEL-convention paths to the Ubuntu one.
+    install -d /usr/share/OVMF; \
+    ln -sf /usr/share/ovmf/OVMF.fd /usr/share/OVMF/OVMF.inteltdx.fd; \
+    ln -sf /usr/share/ovmf/OVMF.fd /usr/share/OVMF/OVMF.inteltdx.secboot.fd; \
+    ln -sf /usr/share/ovmf/OVMF.fd /usr/share/OVMF/OVMF_CODE.fd; \
+    # OVMF_VARS — generate an empty nvram store (Ubuntu doesn't ship one
+    # at that path either; kubevirt expects both CODE + VARS for EFI).
+    ln -sf /usr/share/ovmf/OVMF.fd /usr/share/OVMF/OVMF_VARS.fd
+
+# 3. Patched virt-launcher (libvirt version tags rewritten 10.1.0/10.2.0/11.2.0
+#    → existing Ubuntu 1.2.14/1.2.15/1.2.16; symbols lazy-resolve — the
+#    6 functions introduced in libvirt 10.1/10.2/11.2 are not called on
+#    our VMI-launch path, so the binary starts.)
+COPY --chmod=0755 virt-launcher /usr/bin/virt-launcher
+
+# 4. Patched libvirt-admin.so.0.11000.0 carries an extra
+#    LIBVIRT_ADMIN_11.2.0 version tag + stub virAdmConnectDaemonShutdown
+#    so the launcher's dynamic linker is satisfied at load time.
+COPY --chmod=0644 libvirt-admin.so.0.11000.0 /usr/lib/x86_64-linux-gnu/libvirt-admin.so.0.11000.0
+
+# 4a. /usr/sbin/virtqemud — kubevirt's el9-built node-labeller.sh and
+#     virt-launcher hardcode this split-daemon path. Ubuntu ships only
+#     monolithic libvirtd (Ubuntu's libvirt-daemon-system drops
+#     virtqemud from debian/not-installed). A source-rebuilt virtqemud
+#     works but wants its own -sock / -pidfile / -conf paths; point
+#     virtqemud at the Ubuntu libvirtd via a tiny wrapper, so the
+#     kubevirt tooling talks to the stock daemon (libvirt-sock) that
+#     virsh already knows how to find.
+COPY --chmod=0755 virtqemud-wrapper.sh /usr/sbin/virtqemud
+
+# 5. Copy the other kubevirt-specific binaries and configs from the
+#    original el9 launcher image into this Ubuntu one.
+COPY --from=el9base /usr/bin/virt-launcher-monitor /usr/bin/virt-launcher-monitor
+COPY --from=el9base /usr/bin/virt-freezer          /usr/bin/virt-freezer
+COPY --from=el9base /usr/bin/virt-probe            /usr/bin/virt-probe
+COPY --from=el9base /usr/bin/virt-tail             /usr/bin/virt-tail
+COPY --from=el9base /usr/bin/container-disk        /usr/bin/container-disk
+COPY --from=el9base /usr/bin/libvirt-hook-client   /usr/bin/libvirt-hook-client
+COPY --from=el9base /usr/bin/node-labeller.sh      /usr/bin/node-labeller.sh
+COPY --from=el9base /etc/libvirt/qemu.conf         /etc/libvirt/qemu.conf
+COPY --from=el9base /etc/libvirt/virtqemud.conf    /etc/libvirt/virtqemud.conf
+COPY --from=el9base /etc/libvirt/hooks/qemu        /etc/libvirt/hooks/qemu
+COPY --from=el9base /etc/passwd                    /etc/passwd
+COPY --from=el9base /etc/group                     /etc/group
+COPY --from=el9base /etc/nsswitch.conf             /etc/nsswitch.conf
+
+# setcaps: virt-launcher-monitor needs cap_net_bind_service (matches the
+# bazel xattrs() layer on the el9 image).
+RUN setcap cap_net_bind_service=eip /usr/bin/virt-launcher-monitor
+
+# Our locally-built virtqemud used meson's default localstatedir (no
+# --prefix override), so it writes its pidfile at /var/local/run/
+# instead of RHEL's /run/. node-labeller.sh runs `virtqemud -d` with
+# no override, so just create the dir.
+RUN install -d -m 0755 /var/local/run /var/local/run/libvirt
+
+# Ubuntu libvirtd expects `libvirt-qemu` and `libvirt-dnsmasq` users that
+# its postinst scripts would normally create. The kubevirt passwd-tar
+# layer above ships its own /etc/passwd (just `root` + `qemu`), clobbering
+# the postinst users. Re-add them so libvirtd's QEMU state-driver init
+# doesn't fail with "Failed to parse user 'libvirt-qemu'".
+RUN set -eux; \
+    grep -q '^libvirt-qemu:'    /etc/passwd || echo 'libvirt-qemu:x:64055:64055:libvirt-qemu:/var/lib/libvirt:/usr/sbin/nologin' >> /etc/passwd; \
+    grep -q '^libvirt-qemu:'    /etc/group  || echo 'libvirt-qemu:x:64055:'    >> /etc/group;  \
+    grep -q '^libvirt-dnsmasq:' /etc/passwd || echo 'libvirt-dnsmasq:x:64056:64056:libvirt-dnsmasq:/var/lib/libvirt/dnsmasq:/usr/sbin/nologin' >> /etc/passwd; \
+    grep -q '^libvirt-dnsmasq:' /etc/group  || echo 'libvirt-dnsmasq:x:64056:' >> /etc/group; \
+    grep -q '^kvm:'             /etc/group  || echo 'kvm:x:108:'              >> /etc/group
+
+ENTRYPOINT ["/usr/bin/virt-launcher"]
