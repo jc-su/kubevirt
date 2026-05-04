@@ -13,7 +13,7 @@ install -d -m 0755 /var/run/libvirt
 install -d /etc/libvirt
 # Disable libvirtd's TCP listener (needs TLS certs we don't have). Only
 # the Unix socket is used by kubevirt.
-cat > /etc/libvirt/libvirtd.conf <<'EOF'
+cat >/etc/libvirt/libvirtd.conf <<'EOF'
 listen_tls = 0
 listen_tcp = 0
 auth_unix_rw = "none"
@@ -30,7 +30,7 @@ EOF
 daemon=0
 for a in "$@"; do
     case "$a" in
-        -d|--daemon) daemon=1 ;;
+    -d | --daemon) daemon=1 ;;
     esac
 done
 

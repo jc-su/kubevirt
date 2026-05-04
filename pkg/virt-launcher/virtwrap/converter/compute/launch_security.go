@@ -21,6 +21,7 @@ package compute
 
 import (
 	"strconv"
+	"strings"
 
 	v1 "kubevirt.io/api/core/v1"
 
@@ -83,12 +84,30 @@ func amd64LaunchSecurity(vmi *v1.VirtualMachineInstance) *api.LaunchSecurity {
 		}
 		return domain
 	} else if launchSec.TDX != nil {
-		qgsSocketPath := vmi.Annotations[v1.QGSSocketPathAnnotation]
-		return &api.LaunchSecurity{
-			Type:                   "tdx",
-			QuoteGenerationService: &api.QGS{Path: qgsSocketPath},
-			Policy:                 launchsecurity.TDXPolicyFromSpec(launchSec.TDX.Policy),
+		// QGS target comes from the kubevirt.io/qgs-socket-path annotation —
+		// kept on the annotation rather than a first-class VMI field because
+		// this fork hasn't regenerated the OpenAPI swagger/CRD schema to
+		// include new TDX sub-fields; adding one triggers api-server
+		// "forbidden property" rejection before our webhook can run.
+		//
+		// Accepts two string forms:
+		//   /path/to/socket         → <address type='unix' path='…'/>
+		//   vsock:<cid>:<port>      → <address type='vsock' cid='…' port='…'/>
+		ls := &api.LaunchSecurity{
+			Type:   "tdx",
+			Policy: launchsecurity.TDXPolicyFromSpec(launchSec.TDX.Policy),
 		}
+		if qgs := vmi.Annotations[v1.QGSSocketPathAnnotation]; qgs != "" {
+			if strings.HasPrefix(qgs, "vsock:") {
+				parts := strings.SplitN(qgs, ":", 3)
+				if len(parts) == 3 {
+					ls.QuoteGenerationService = &api.QGS{Address: api.QGSAddress{Type: "vsock", CID: parts[1], Port: parts[2]}}
+				}
+			} else if strings.HasPrefix(qgs, "/") {
+				ls.QuoteGenerationService = &api.QGS{Address: api.QGSAddress{Type: "unix", Path: qgs}}
+			}
+		}
+		return ls
 	}
 
 	return nil

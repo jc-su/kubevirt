@@ -59,9 +59,9 @@ LAUNCHER_IMAGE=${LAUNCHER_IMAGE:-${REGISTRY}/kubevirt/virt-launcher:devel}
 # steps would cherry-pick files from a previous shim (self-reference).
 if [[ -z "${SOURCE_LAUNCHER_IMAGE:-}" ]]; then
     SOURCE_LAUNCHER_DIGEST=$(docker buildx imagetools inspect \
-        "${LAUNCHER_IMAGE}" --format '{{.Manifest.Digest}}' 2>/dev/null \
-        || curl -sI "http://${REGISTRY}/v2/kubevirt/virt-launcher/manifests/devel" \
-            | awk -F': ' '/Docker-Content-Digest/{print $2}' | tr -d '\r\n')
+        "${LAUNCHER_IMAGE}" --format '{{.Manifest.Digest}}' 2>/dev/null ||
+        curl -sI "http://${REGISTRY}/v2/kubevirt/virt-launcher/manifests/devel" |
+        awk -F': ' '/Docker-Content-Digest/{print $2}' | tr -d '\r\n')
     if [[ -z "$SOURCE_LAUNCHER_DIGEST" ]]; then
         echo "FATAL: cannot resolve ${LAUNCHER_IMAGE} to a digest; run bazel-push-images first" >&2
         exit 1
@@ -107,22 +107,22 @@ fi
 LV=$LV_SRC/libvirt-11.0.0
 
 # 4a. Add stub virAdmConnectDaemonShutdown if not already.
+# Appended at EOF rather than spliced mid-file: a prior regex-anchored splice
+# landed the stub inside another function's body (the `{[^}]*}` anchor
+# matched the first inner brace-pair, not the outer function boundary),
+# which left the surrounding function open-ended and the compiler reported
+# "static declaration follows non-static declaration" on the block-scoped
+# prototype. EOF append is unambiguous.
 if ! grep -q "virAdmConnectDaemonShutdown" "$LV/src/admin/libvirt-admin.c"; then
-python3 - "$LV/src/admin/libvirt-admin.c" <<'PY'
-import sys, re
-p = sys.argv[1]
-txt = open(p).read()
-stub = '''
+    cat >>"$LV/src/admin/libvirt-admin.c" <<'STUB'
+
+
 /*
  * Back-ported stub for kubevirt compatibility. virAdmConnectDaemonShutdown
- * was added in libvirt 11.2; we only need the versioned symbol to exist
- * so el9-built binaries resolve at load time. Calls are not expected on
- * this deployment; return -1 if invoked.
+ * was added in libvirt 11.2; we only need the versioned symbol to exist so
+ * el9-built binaries resolve at load time. Calls are not expected on this
+ * deployment; return -1 if invoked.
  */
-int
-virAdmConnectDaemonShutdown(virAdmConnectPtr conn,
-                            unsigned int flags);
-
 int
 virAdmConnectDaemonShutdown(virAdmConnectPtr conn G_GNUC_UNUSED,
                             unsigned int flags G_GNUC_UNUSED)
@@ -131,20 +131,13 @@ virAdmConnectDaemonShutdown(virAdmConnectPtr conn G_GNUC_UNUSED,
                    "virAdmConnectDaemonShutdown unavailable on libvirt 11.0 stub");
     return -1;
 }
-'''
-# Append after virAdmConnectSetDaemonTimeout's closing brace.
-anchor = re.compile(r"(^int\n^virAdmConnectSetDaemonTimeout\([^)]*\)\n\{[^}]*\})\n", re.M|re.S)
-new = anchor.sub(lambda m: m.group(1) + "\n" + stub, txt, count=1)
-if new == txt:
-    raise SystemExit("failed to locate insertion anchor")
-open(p, "w").write(new)
-print("added stub virAdmConnectDaemonShutdown")
-PY
+STUB
+    echo "added stub virAdmConnectDaemonShutdown"
 fi
 
 # 4b. Add LIBVIRT_ADMIN_11.2.0 version script entry if not already.
 if ! grep -q "LIBVIRT_ADMIN_11.2.0" "$LV/src/admin/libvirt_admin_public.syms"; then
-    cat >> "$LV/src/admin/libvirt_admin_public.syms" <<'EOF'
+    cat >>"$LV/src/admin/libvirt_admin_public.syms" <<'EOF'
 
 LIBVIRT_ADMIN_11.2.0 {
     global:
@@ -156,8 +149,7 @@ fi
 # 4c. Configure + build libvirt-admin.so + virtqemud only.
 BUILD=$LV/build-admin
 if [[ ! -f "$BUILD/build.ninja" ]]; then
-    meson setup "$BUILD" \
-        --source-dir "$LV" \
+    meson setup "$BUILD" "$LV" \
         -Ddriver_qemu=enabled \
         -Ddriver_libvirtd=enabled \
         -Ddriver_remote=enabled \
@@ -176,10 +168,11 @@ fi
 ninja -C "$BUILD" src/libvirt-admin.so.0.11000.0 src/virtqemud
 
 cp "$BUILD/src/libvirt-admin.so.0.11000.0" "$WORK/"
-cp "$BUILD/src/virtqemud"                  "$WORK/"
+cp "$BUILD/src/virtqemud" "$WORK/"
 
 # Step 5 — assemble the final image from the Dockerfile shim.
 cp "$SCRIPT_DIR/Dockerfile.launcher-shim" "$WORK/Dockerfile"
+cp "$SCRIPT_DIR/virtqemud-wrapper.sh" "$WORK/virtqemud-wrapper.sh"
 cd "$WORK"
 docker buildx build --provenance=false --sbom=false \
     --output type=image,push=true \

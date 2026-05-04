@@ -1181,8 +1181,23 @@ type LaunchSecurity struct {
 	QuoteGenerationService *QGS   `xml:"quoteGenerationService,omitempty"`
 }
 
+// QGS carries the TDX QGS target for libvirt's <quoteGenerationService>
+// element. Empirically validated against the Canonical TDX libvirt PPA
+// (11.0.0+tdx2.0~ppa1): the schema requires a nested <SocketAddress> child
+// element (literal capital-S name — not <address>), per the SocketAddress
+// RelaxNG define in domaincommon.rng which itself contains <element
+// name="SocketAddress">. Other libvirt forks (e.g. Intel kubevirt-tdx)
+// use a flat <Quote-Generation-Service>text</> element; this build does
+// not accept that form.
 type QGS struct {
-	Path string `xml:"path,attr,omitempty"`
+	Address QGSAddress `xml:"SocketAddress"`
+}
+
+type QGSAddress struct {
+	Type string `xml:"type,attr"`           // "unix" | "vsock"
+	Path string `xml:"path,attr,omitempty"` // unix socket path
+	CID  string `xml:"cid,attr,omitempty"`  // vsock CID
+	Port string `xml:"port,attr,omitempty"` // vsock port
 }
 
 //END LaunchSecurity --------------------
